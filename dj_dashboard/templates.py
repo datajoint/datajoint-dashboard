@@ -1,18 +1,17 @@
 import datajoint as dj
 import dash
-import dash_table
 from dash.dependencies import Input, Output, State
 import dash_html_components as html
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 from . import dj_utils, component_utils, callback_utils
-import datetime
+import warnings
 
 DataJointTable = dj.user_tables.OrderedClass
 
 
 class TableBlock:
-    def __init__(self, table: DataJointTable, app=None, include_parts=False,
+    def __init__(self, table: DataJointTable, app=None, extra_tables=[],
                  table_height='800px',
                  table_width='800px',
                  button_style={
@@ -31,9 +30,63 @@ class TableBlock:
         self.attrs = table.heading.attributes
         self.field_names = table.heading.names
 
-        self.display_table = component_utils.create_display_table(
+        main_display_table = component_utils.create_display_table(
             self.table, f'{self.table_name}-table',
             height=table_height, width=table_width)
+
+        # validate the extra tables
+        self.valid_extra_tables = []
+        for t in extra_tables:
+            if all([k in t.heading.primary_key for k in self.primary_key]):
+                self.valid_extra_tables.append(t)
+            else:
+                warnings.warn(
+                    f'Extra table {t} is not bound to the master table, \
+                      ignored in display.')
+
+        if self.valid_extra_tables:
+
+            self.valid_extra_table_fields = [
+                t.heading.names for t in self.valid_extra_tables]
+            self.valid_extra_table_names = [
+                f'{self.table_name}-{t.__name__.lower()}' for t in self.valid_extra_tables]
+
+            display_extra_tables = []
+            for t in self.valid_extra_tables:
+                display_extra_tables.append(
+                    html.Div(
+                        [
+                            html.H6(f'{t.__name__}'),
+                            component_utils.create_display_table(
+                                t, f'{self.table_name}-{t.__name__.lower()}-table',
+                                excluded_fields=['subject_id'],
+                                empty_first=True,
+                                height='200px', selectable=False)
+                        ]
+                    )
+                )
+                self.display_table = html.Div(
+                    [
+                        dbc.Row(
+                            [
+                                html.Div(
+                                    [
+                                        html.H6(f'{self.table.__name__}'),
+                                        main_display_table
+                                    ]
+                                ),
+                                dbc.Col(display_extra_tables)
+                            ]
+                        )
+                    ]
+                )
+        else:
+            self.display_table = html.Div(
+                [
+                    html.H6(f'{self.table.__name__}'),
+                    main_display_table
+                ]
+            )
 
         self.add_button = html.Button(
             children=f'Add a {self.table_name} record',
@@ -41,7 +94,7 @@ class TableBlock:
             style=button_style)
 
         self.delete_button = html.Button(
-            children=f'Delete the current record',
+            children='Delete the current record',
             id=f'delete-{self.table_name}-button', n_clicks=0,
             style=button_style
         )
@@ -53,12 +106,12 @@ class TableBlock:
         )
 
         self.add_modal = component_utils.create_modal(
-            self.table, self.table_name, include_parts=include_parts,
+            self.table, self.table_name, extra_tables=extra_tables,
             mode='add'
         )
 
         self.update_modal = component_utils.create_modal(
-            self.table, self.table_name, include_parts=include_parts,
+            self.table, self.table_name, extra_tables=extra_tables,
             mode='update'
         )
 
@@ -102,11 +155,10 @@ class TableBlock:
 
                         html.Div(
                             [
-                                html.H6(f'{self.table.__name__}'),
                                 self.display_table
                             ],
                             style={'marginRight': '1em',
-                                'display': 'inline-block'}
+                                   'display': 'inline-block'}
                         ),
                     ]
                 ),
@@ -117,6 +169,13 @@ class TableBlock:
                 self.add_modal
             ]
         )
+
+    def get_pk(self, entry):
+        return {
+            k: v
+            for k, v in callback_utils.clean_single_gui_record(
+                entry, self.attrs).items()
+            if k in self.primary_key}
 
     def callbacks(self, app):
 
@@ -143,11 +202,21 @@ class TableBlock:
                 return True
             return False
 
-        @app.callback(
-            [
+        if not self.valid_extra_tables:
+            update_table_data_outputs = [
                 Output(f'{self.table_name}-table', 'data'),
                 Output(f'delete-{self.table_name}-message-box', 'value')
-            ],
+            ]
+        else:
+            update_table_data_outputs = \
+                [Output(f'{self.table_name}-table', 'data')] + \
+                [Output(f'{self.table_name}-{t.__name__.lower()}-table', 'data')
+                 for t in self.valid_extra_tables] + \
+                [Output(f'delete-{self.table_name}-message-box', 'value')]
+
+
+        @app.callback(
+            update_table_data_outputs,
             [
                 Input(f'add-{self.table_name}-close', 'n_clicks'),
                 Input(f'delete-{self.table_name}-confirm', 'submit_n_clicks'),
@@ -167,10 +236,7 @@ class TableBlock:
             triggered_component = ctx.triggered[0]['prop_id'].split('.')[0]
 
             if triggered_component == f'delete-{self.table_name}-confirm' and selected_rows:
-                current_record = callback_utils.clean_single_gui_record(
-                    data[selected_rows[0]], self.attrs)
-                pk = {k: v for k, v in current_record.items()
-                      if k in self.primary_key}
+                pk = self.get_pk(data[selected_rows[0]])
                 try:
                     (self.table & pk).delete_quick()
                     delete_message = delete_message + \
@@ -183,12 +249,29 @@ class TableBlock:
                                          f'update-{self.table_name}-close'):
                 data = self.table.fetch(as_dict=True)
 
-            return data, delete_message
+            if self.valid_extra_tables:
+                if selected_rows:
+                    pk = self.get_pk(data[selected_rows[0]])
+                    extra_table_data = [
+                        (t & pk).fetch(as_dict=True)
+                        for t, fields in zip(
+                            self.valid_extra_tables,
+                            self.valid_extra_table_fields)
+                    ]
+                else:
+                    extra_table_data = [
+                        [{f: '' for f in fields}]
+                        for t, fields in zip(
+                            self.valid_extra_tables,
+                            self.valid_extra_table_fields)
+                    ]
+
+            return tuple([data] + extra_table_data + [delete_message])
 
         def toggle_modal(
                 n_open, n_close,
                 is_open, data, selected_rows,
-                modal_data, mode):
+                modal_data, *, mode='add'):
 
             ctx = dash.callback_context
             triggered_component = ctx.triggered[0]['prop_id'].split('.')[0]
@@ -200,7 +283,8 @@ class TableBlock:
                     if mode == 'add':
                         modal_data = [{k: '' for k in self.field_names}]
                     elif mode == 'update':
-                        raise ValueError('Update Modal open without a particular row selected')
+                        raise ValueError(
+                            'Update Modal open without a particular row selected')
 
                 modal_open = not is_open if n_open or n_close else is_open
 
@@ -274,10 +358,7 @@ class TableBlock:
 
                 add_message = 'Add message:'
                 try:
-                    pk = {k: v
-                          for k, v in callback_utils.clean_single_gui_record(
-                            entry, self.attrs).items()
-                          if k in self.primary_key}
+                    pk = self.get_pk(entry)
                     if (self.table & pk):
                         add_message = add_message + \
                             f'\nWarning: record {pk} exists in database'

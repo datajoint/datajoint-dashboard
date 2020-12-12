@@ -1,7 +1,6 @@
 import datajoint as dj
 import re
 import inspect
-import pdb
 import datetime
 
 

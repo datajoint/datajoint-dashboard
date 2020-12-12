@@ -1,6 +1,5 @@
 import datetime
 import datajoint as dj
-import pdb
 
 
 def clean_single_gui_record(d, attrs, master_key=None):
@@ -19,22 +18,24 @@ def clean_single_gui_record(d, attrs, master_key=None):
                 continue
 
             elif attrs[k].type == 'date':
+
+                if type(d[k]) == datetime.date:
+                    continue
                 try:
                     d[k] = datetime.datetime.strptime(v, '%Y-%m-%d').date()
                 except ValueError:
                     return f'Invalid date value {v}'
 
-            elif attrs[k].type == 'datetime':
+            elif attrs[k].type in ('datetime', 'timestamp'):
+                if type(d[k]) == datetime.datetime:
+                    continue
                 try:
                     d[k] = datetime.datetime.strptime(v, '%Y-%m-%d %H:%M:%S')
                 except ValueError:
-                    return f'Invalid datetime value {v}'
-
-            elif attrs[k].type == 'timestamp':
-                try:
-                    d[k] = datetime.datetime.strptime(v, '%Y-%m-%dT%H:%M:%S')
-                except ValueError:
-                    return f'Invalid timestamp value {v}'
+                    try:
+                        d[k] = datetime.datetime.strptime(v, '%Y-%m-%dT%H:%M:%S')
+                    except ValueError:
+                        return f'Invalid {attrs[k].type} value {v}'
 
             elif 'int' in attrs[k].type:
                 try:
@@ -61,8 +62,8 @@ def clean_gui_data(table, data, master_key=None):
     clean_data = []
     for d in data:
         clean_d = clean_single_gui_record(d, attrs, master_key=master_key)
-        if d:
-            clean_data.append(d)
+        if clean_d:
+            clean_data.append(clean_d)
 
     return clean_data
 
@@ -101,7 +102,6 @@ def update_table(table, new_data, pk=None, msg='Update message:\n'):
 
 def update_part_table(part_table, master_key, new_data, msg=''):
 
-    attrs = part_table.heading.attributes
     pks = part_table.heading.primary_key
 
     # clean up the new data
@@ -176,7 +176,7 @@ def update_part_table(part_table, master_key, new_data, msg=''):
                                 f'in field {old_k}: {old_v} -> {new_v}.\n'
 
                         except Exception as e:
-                            mag = msg + 'Error when updating part table ' + \
+                            msg = msg + 'Error when updating part table ' + \
                                 f'{part_table.__name__} record {pk}: {str(e)}.\n'
 
     return msg

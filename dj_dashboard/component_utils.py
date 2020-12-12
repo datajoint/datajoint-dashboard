@@ -25,9 +25,11 @@ table_style_template = dict(
         'fontWeight': 'bold'})
 
 
-def create_display_table(table, table_id=None, height='900px', width='1200px',
-                         selectable=True, excluded_fields=[],
-                         empty_first=False):
+def create_display_table(
+        table, table_id=None,
+        height='900px', width=None,
+        selectable=True, excluded_fields=[],
+        empty_first=False):
 
     if not table_id:
         table_id = table.__name__.lower()
@@ -47,6 +49,12 @@ def create_display_table(table, table_id=None, height='900px', width='1200px',
             row_selectable='single'
         )
 
+    columns = [{"name": i, "id": i}
+               for i in table.heading.names if i not in excluded_fields]
+
+    if not width:
+        width = f'{min([120 * len(columns), 1200])}px'
+
     table_style['style_table'].update(
         {
             'minHeight': height,
@@ -57,9 +65,6 @@ def create_display_table(table, table_id=None, height='900px', width='1200px',
             'maxWidth': width
         }
     )
-
-    columns = [{"name": i, "id": i}
-               for i in table.heading.names if i not in excluded_fields]
 
     if empty_first:
         data = [{c['id']: '' for c in columns}]
@@ -133,7 +138,7 @@ def create_edit_record_table(
     )
 
 
-def create_modal(table, id=None, dropdown_fields=[], include_parts=False, mode='add'):
+def create_modal(table, id=None, dropdown_fields=[], extra_tables=[], mode='add'):
 
     if not id:
         id = table.__name__.lower()
@@ -147,14 +152,13 @@ def create_modal(table, id=None, dropdown_fields=[], include_parts=False, mode='
         height='200px', width='800px',
         pk_editable=mode != 'update')
 
-    if include_parts:
-        p_tables = [getattr(table, attr)
-                    for attr in dir(table) if attr[0].isupper()]
+    if extra_tables:
         part_tables = []
-        for p in p_tables:
+        for p in extra_tables:
             part_tables.append(
                 html.Div(
                     [
+                        html.H6(f'   {p.__name__}'),
                         html.Button(
                             'Add a row',
                             id=f'{mode}-{table.__name__.lower()}-{p.__name__.lower()}-add-row-button',
