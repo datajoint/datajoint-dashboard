@@ -177,6 +177,49 @@ class TableBlock:
                 entry, self.attrs).items()
             if k in self.primary_key}
 
+    def get_toggle_variables(self, mode):
+
+        toggle_outputs = \
+            [
+                Output(f'{mode}-{self.table_name}-modal', 'is_open'),
+                Output(f'{mode}-{self.table_name}-table', 'data'),
+            ]
+        toggle_inputs = \
+            [
+                Input(f'{mode}-{self.table_name}-button', 'n_clicks'),
+                Input(f'{mode}-{self.table_name}-close', 'n_clicks'),
+            ]
+        toggle_states = \
+            [
+                State(f'{mode}-{self.table_name}-modal', 'is_open'),
+                State(f'{self.table_name}-table', 'data'),
+                State(f'{self.table_name}-table', 'selected_rows'),
+                State(f'{mode}-{self.table_name}-table', 'data'),
+            ]
+
+        if self.valid_extra_tables:
+
+            toggle_outputs += [
+                Output(f'{mode}-{name}-table', 'data')
+                for name in self.valid_extra_table_names
+            ]
+            toggle_inputs += [
+                Input(f'{mode}-{name}-add-row-button', 'n_clicks')
+                for name in self.valid_extra_table_names
+            ]
+
+            toggle_states += \
+                [
+                    State(f'{name}-table', 'data')
+                    for name in self.valid_extra_table_names
+                ] + \
+                [
+                    State(f'{mode}-{name}-table', 'data')
+                    for name in self.valid_extra_table_names
+                ]
+
+        return toggle_outputs, toggle_inputs, toggle_states
+
     def callbacks(self, app):
 
         @app.callback(
@@ -213,7 +256,6 @@ class TableBlock:
                 [Output(f'{self.table_name}-{t.__name__.lower()}-table', 'data')
                  for t in self.valid_extra_tables] + \
                 [Output(f'delete-{self.table_name}-message-box', 'value')]
-
 
         @app.callback(
             update_table_data_outputs,
@@ -268,25 +310,66 @@ class TableBlock:
 
             return tuple([data] + extra_table_data + [delete_message])
 
-        def toggle_modal(
-                n_open, n_close,
-                is_open, data, selected_rows,
-                modal_data, *, mode='add'):
+        def toggle_modal(*args, mode='add'):
+
+            if len(args) == 6:
+                (n_open, n_close,
+                 is_open, data, selected_rows,
+                 modal_data) = args
+
+            elif len(args) > 6 and \
+                    len(args) - 6 == 3*len(self.valid_extra_tables):
+
+                n_extra_tables = len(self.valid_extra_tables)
+
+                (n_open, n_close) = args[:2]
+                idx_end = 2 + n_extra_tables
+                n_add_row_extra_tables = args[2:idx_end]
+
+                is_open, data, selected_rows = args[idx_end:idx_end+3]
+                modal_data = args[idx_end+3]
+                idx_start = idx_end + 4
+                idx_end = idx_start + n_extra_tables
+                data_extra_tables = list(args[idx_start:idx_end])
+                modal_data_extra_tables = list(args[idx_end:])
+            else:
+                raise ValueError('Invalid callback input arguments.')
 
             ctx = dash.callback_context
             triggered_component = ctx.triggered[0]['prop_id'].split('.')[0]
 
+            if self.valid_extra_tables:
+                add_row_buttons = [
+                    f'{mode}-{name}-add-row_button'
+                    for name in self.valid_extra_table_names]
+
             if triggered_component == f'{mode}-{self.table_name}-button':
                 if selected_rows:
                     modal_data = [data[selected_rows[0]]]
+                    if self.valid_extra_tables:
+                        modal_data_extra_tables = data_extra_tables
                 else:
                     if mode == 'add':
                         modal_data = [{k: '' for k in self.field_names}]
+                        if self.valid_extra_tables:
+                            modal_data_extra_tables = [
+                                [{k: '' for k in fields if k not in self.primary_key}]
+                                for fields in self.valid_extra_table_fields
+                            ]
                     elif mode == 'update':
                         raise ValueError(
                             'Update Modal open without a particular row selected')
 
                 modal_open = not is_open if n_open or n_close else is_open
+
+            elif self.valid_extra_tables and \
+                    triggered_component in add_row_buttons:
+                table_idx = add_row_buttons.index(triggered_component)
+                modal_data_extra_tables[table_idx] = \
+                    [{k: '' for k in self.valid_extra_table_fields[table_idx]
+                     if k not in self.primary_key}]
+
+                modal_open = is_open
 
             elif triggered_component == f'{mode}-{self.table_name}-close':
                 modal_open = not is_open if n_open or n_close else is_open
@@ -294,42 +377,16 @@ class TableBlock:
             else:
                 modal_open = is_open
 
-            return modal_open, modal_data
+            return tuple([modal_open] + [modal_data] + modal_data_extra_tables)
 
         @app.callback(
-            [
-                Output(f'add-{self.table_name}-modal', 'is_open'),
-                Output(f'add-{self.table_name}-table', 'data'),
-            ],
-            [
-                Input(f'add-{self.table_name}-button', 'n_clicks'),
-                Input(f'add-{self.table_name}-close', 'n_clicks'),
-            ],
-            [
-                State(f'add-{self.table_name}-modal', 'is_open'),
-                State(f'{self.table_name}-table', 'data'),
-                State(f'{self.table_name}-table', 'selected_rows'),
-                State(f'add-{self.table_name}-table', 'data'),
-            ],
+            *self.get_toggle_variables(mode='add')
         )
         def toggle_add_modal(*args):
             return toggle_modal(*args, mode='add')
 
         @app.callback(
-            [
-                Output(f'update-{self.table_name}-modal', 'is_open'),
-                Output(f'update-{self.table_name}-table', 'data'),
-            ],
-            [
-                Input(f'update-{self.table_name}-button', 'n_clicks'),
-                Input(f'update-{self.table_name}-close', 'n_clicks'),
-            ],
-            [
-                State(f'update-{self.table_name}-modal', 'is_open'),
-                State(f'{self.table_name}-table', 'data'),
-                State(f'{self.table_name}-table', 'selected_rows'),
-                State(f'update-{self.table_name}-table', 'data'),
-            ],
+            *self.get_toggle_variables(mode='update')
         )
         def toggle_update_modal(*args):
             return toggle_modal(*args, mode='update')
