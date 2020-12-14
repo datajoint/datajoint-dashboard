@@ -50,6 +50,7 @@ class TableBlock:
                 t.heading.names for t in self.valid_extra_tables]
             self.valid_extra_table_names = [
                 f'{self.table_name}-{t.__name__.lower()}' for t in self.valid_extra_tables]
+            self.n_extra_tables = len(self.valid_extra_table_fields)
 
             display_extra_tables = []
             for t in self.valid_extra_tables:
@@ -277,13 +278,17 @@ class TableBlock:
             ctx = dash.callback_context
             triggered_component = ctx.triggered[0]['prop_id'].split('.')[0]
 
-            if triggered_component == f'delete-{self.table_name}-confirm' and selected_rows:
+            if triggered_component == f'delete-{self.table_name}-confirm' and \
+                    selected_rows:
                 pk = self.get_pk(data[selected_rows[0]])
                 try:
-                    (self.table & pk).delete_quick()
+                    if '__' in self.table.full_table_name:
+                        (self.table & pk).delete(force=True)
+                    else:
+                        (self.table & pk).delete()
                     delete_message = delete_message + \
                         f'Successfully deleted record {pk}!'
-                except Exception as e:
+                except:
                     delete_message = delete_message + \
                         f'Error in deleting record {pk}: {str(e)}.'
                 data = self.table.fetch(as_dict=True)
@@ -320,16 +325,14 @@ class TableBlock:
             elif len(args) > 6 and \
                     len(args) - 6 == 3*len(self.valid_extra_tables):
 
-                n_extra_tables = len(self.valid_extra_tables)
-
                 (n_open, n_close) = args[:2]
-                idx_end = 2 + n_extra_tables
+                idx_end = 2 + self.n_extra_tables
                 n_add_row_extra_tables = args[2:idx_end]
 
                 is_open, data, selected_rows = args[idx_end:idx_end+3]
                 modal_data = args[idx_end+3]
                 idx_start = idx_end + 4
-                idx_end = idx_start + n_extra_tables
+                idx_end = idx_start + self.n_extra_tables
                 data_extra_tables = list(args[idx_start:idx_end])
                 modal_data_extra_tables = list(args[idx_end:])
             else:
@@ -340,7 +343,7 @@ class TableBlock:
 
             if self.valid_extra_tables:
                 add_row_buttons = [
-                    f'{mode}-{name}-add-row_button'
+                    f'{mode}-{name}-add-row-button'
                     for name in self.valid_extra_table_names]
 
             if triggered_component == f'{mode}-{self.table_name}-button':
@@ -353,7 +356,8 @@ class TableBlock:
                         modal_data = [{k: '' for k in self.field_names}]
                         if self.valid_extra_tables:
                             modal_data_extra_tables = [
-                                [{k: '' for k in fields if k not in self.primary_key}]
+                                [{k: '' for k in fields
+                                  if k not in self.primary_key}]
                                 for fields in self.valid_extra_table_fields
                             ]
                     elif mode == 'update':
@@ -365,7 +369,7 @@ class TableBlock:
             elif self.valid_extra_tables and \
                     triggered_component in add_row_buttons:
                 table_idx = add_row_buttons.index(triggered_component)
-                modal_data_extra_tables[table_idx] = \
+                modal_data_extra_tables[table_idx] += \
                     [{k: '' for k in self.valid_extra_table_fields[table_idx]
                      if k not in self.primary_key}]
 
@@ -391,27 +395,52 @@ class TableBlock:
         def toggle_update_modal(*args):
             return toggle_modal(*args, mode='update')
 
+        if self.valid_extra_tables:
+            add_record_states = \
+                [
+                    State(f'add-{self.table_name}-table', 'data')
+                ] + \
+                [
+                    State(f'add-{name}-table', 'data')
+                    for name in self.valid_extra_table_names
+                ] + \
+                [
+                    State(f'add-{self.table_name}-message', 'value')
+                ]
+        else:
+            add_record_states = \
+                [
+                    State(f'add-{self.table_name}-table', 'data'),
+                    State(f'add-{self.table_name}-message', 'value')
+                ]
+
         @app.callback(
             Output(f'add-{self.table_name}-message', 'value'),
             [
                 Input(f'add-{self.table_name}-confirm', 'n_clicks'),
                 Input(f'add-{self.table_name}-close', 'n_clicks')
             ],
-            [
-                State(f'add-{self.table_name}-table', 'data'),
-                State(f'add-{self.table_name}-message', 'value')
-            ]
+            add_record_states
         )
-        def add_record(
-                n_clicks_add, n_clicks_close,
-                new_data, add_message):
+        def add_record(*args):
+            if len(args) == 4:
+                (n_clicks_add, n_clicks_close,
+                 new_data, add_message) = args
+            elif self.valid_extra_table_fields and \
+                    len(args) == 4 + len(self.valid_extra_table_fields):
+                (n_clicks_add, n_clicks_close, new_data) = args[:3]
+                new_data_extra_tables = list(args[3:3+self.n_extra_tables])
+                add_message = args[-1]
+            else:
+                raise ValueError('Invalid callback input arguments for add record.')
 
             ctx = dash.callback_context
             triggered_component = ctx.triggered[0]['prop_id'].split('.')[0]
 
             if triggered_component == f'add-{self.table_name}-confirm':
 
-                entry = {k: v for k, v in new_data[0].items() if v != ''}
+                entry = callback_utils.clean_single_gui_record(
+                    new_data[0], self.attrs)
 
                 add_message = 'Add message:'
                 try:
@@ -422,29 +451,58 @@ class TableBlock:
                     else:
                         self.table.insert1(entry)
                         add_message = add_message + \
-                            f'\nSuccessful insertion to {self.table_name}.'
-
+                            f'\nSuccessfully inserted into {self.table.__name__}.\n'
                 except Exception as e:
                     add_message = add_message + \
                         f'\nError inserting into {self.table_name}: {str(e)}'
+
+                if self.valid_extra_tables:
+                    for t, data_t in zip(self.valid_extra_tables,
+                                         new_data_extra_tables):
+
+                        add_message = callback_utils.insert_part_table(
+                            t, pk, data_t, msg=add_message)
 
             elif triggered_component == f'add-{self.table_name}-close':
                 add_message = 'Add message:'
 
             return add_message
 
+        update_record_states = \
+            [
+                State(f'update-{self.table_name}-table', 'data'),
+            ]
+        if self.valid_extra_tables:
+            update_record_states += \
+            [
+                State(f'update-{name}-table', 'data')
+                for name in self.valid_extra_table_names
+            ]
+
         @app.callback(
             Output(f'update-{self.table_name}-message', 'value'),
             [
                 Input(f'update-{self.table_name}-confirm', 'n_clicks')
             ],
-            [
-                State(f'update-{self.table_name}-table', 'data'),
-            ],
+            update_record_states
         )
-        def update_record(
-                n_clicks, update_data):
+        def update_record(*args):
+
+            if len(args) == 2:
+                (n_clicks, update_data) = args
+            elif self.valid_extra_tables and len(args) == 2 + self.n_extra_tables:
+                n_clicks, update_data = args[:2]
+                update_data_extra_tables = list(args[2:])
+            else:
+                raise ValueError('Invalid callback input arguments for update record.')
 
             new = update_data[0]
             pk = {k: v for k, v in new.items() if k in self.primary_key}
-            return callback_utils.update_table(self.table, new, pk)
+            msg = callback_utils.update_table(self.table, new, pk)
+
+            if self.valid_extra_tables:
+                for t, data_t in zip(self.valid_extra_tables,
+                                     update_data_extra_tables):
+                    msg = callback_utils.update_part_table(
+                        t, pk, data_t, msg)
+            return msg

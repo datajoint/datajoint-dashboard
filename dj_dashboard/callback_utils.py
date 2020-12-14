@@ -2,7 +2,7 @@ import datetime
 import datajoint as dj
 
 
-def clean_single_gui_record(d, attrs, master_key=None):
+def clean_single_gui_record(d, attrs, master_key=None, add_master_key=False):
 
     if (not master_key and set(d.values()) != {''}) or \
             (master_key and
@@ -49,23 +49,58 @@ def clean_single_gui_record(d, attrs, master_key=None):
                 except ValueError:
                     return f'Invalid numeric value {v}'
 
-        return d
+        if master_key and add_master_key:
+            keys_to_add = {k: v for k, v in master_key.items()
+                           if k not in d.keys()}
+            if keys_to_add:
+                return dict(**keys_to_add, **d)
+            else:
+                return d
+        else:
+            return d
 
     else:
         return None
 
 
-def clean_gui_data(table, data, master_key=None):
+def clean_gui_data(table, data, master_key=None, add_master_key=False):
 
     attrs = table.heading.attributes
 
     clean_data = []
     for d in data:
-        clean_d = clean_single_gui_record(d, attrs, master_key=master_key)
+        clean_d = clean_single_gui_record(
+            d, attrs, master_key=master_key, add_master_key=add_master_key)
         if clean_d:
             clean_data.append(clean_d)
 
     return clean_data
+
+
+def insert_part_table(part_table, master_key, new_data, msg=''):
+
+    new_data = clean_gui_data(
+        part_table, new_data, master_key, add_master_key=True)
+
+    if type(new_data) == str:
+        # return the error message
+        return new_data
+
+    try:
+        part_table.insert(new_data, skip_duplicates=True)
+        msg = msg + 'Successfully inserted records into part table ' + \
+            f'{part_table.__name__}.\n'
+
+    except:
+        for r in new_data:
+            try:
+                part_table.insert1(r, skip_duplicates=True)
+                msg = msg + 'Successfully inserted record in part table ' + \
+                    f'{part_table.__name__}, {r}:.\n'
+            except Exception as e:
+                msg = msg + 'Error inserting record in part table ' + \
+                    f'{part_table.__name__}, {r}: {str(e)}.\n'
+    return msg
 
 
 def update_table(table, new_data, pk=None, msg='Update message:\n'):
@@ -105,7 +140,8 @@ def update_part_table(part_table, master_key, new_data, msg=''):
     pks = part_table.heading.primary_key
 
     # clean up the new data
-    new_data = clean_gui_data(part_table, new_data, master_key)
+    new_data = clean_gui_data(
+        part_table, new_data, master_key, add_master_key=True)
 
     if type(new_data) == str:
         # return the error message
@@ -143,13 +179,13 @@ def update_part_table(part_table, master_key, new_data, msg=''):
         if new_records:
             try:
                 part_table.insert(new_records)
-                msg = msg + 'Successfully insert records into part table ' + \
+                msg = msg + 'Successfully inserted records into part table ' + \
                     f'{part_table.__name__}.\n'
             except Exception as e:
                 for r in new_records:
                     try:
                         part_table.insert1(r)
-                        msg = msg + 'Error inserting record in part table ' + \
+                        msg = msg + 'Successfully inserted record in part table ' + \
                             f'{part_table.__name__}, {r}: {str(e)}.\n'
                     except Exception as e:
                         msg = msg + 'Error inserting record in part table ' + \
