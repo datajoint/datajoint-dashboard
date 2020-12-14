@@ -447,7 +447,7 @@ class TableBlock:
                     pk = self.get_pk(entry)
                     if (self.table & pk):
                         add_message = add_message + \
-                            f'\nWarning: record {pk} exists in database'
+                            f'\nWarning: record {pk} exists in database\n'
                     else:
                         self.table.insert1(entry)
                         add_message = add_message + \

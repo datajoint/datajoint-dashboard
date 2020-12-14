@@ -87,6 +87,7 @@ def insert_part_table(part_table, master_key, new_data, msg=''):
         return new_data
 
     try:
+        print(new_data)
         part_table.insert(new_data, skip_duplicates=True)
         msg = msg + 'Successfully inserted records into part table ' + \
             f'{part_table.__name__}.\n'
