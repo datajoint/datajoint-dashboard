@@ -2,6 +2,7 @@ import datajoint as dj
 import re
 import inspect
 import datetime
+import itertools
 
 
 def get_dropdown_fields(table):
@@ -9,8 +10,9 @@ def get_dropdown_fields(table):
     graph.load()
     foreign_keys = graph.parents(table.full_table_name)
 
-    return [list(fk.get('attr_map').items())[0][0]
-            for fk in foreign_keys.values()] + \
+    return list(itertools.chain.from_iterable(
+        [list(fk.get('attr_map').keys())
+         for fk in foreign_keys.values()])) + \
            [f for f in table.heading.names
             if 'enum' in table.heading.attributes[f].type]
 
@@ -44,15 +46,16 @@ def get_options(table, field, context=None):
         foreign_keys = graph.parents(table.full_table_name)
 
         for key, value in foreign_keys.items():
-            if field == list(value['attr_map'].items())[0][0]:
+            dependent_fields = [key_pairs[0] for key_pairs in list(value['attr_map'].items())]
+            if field in dependent_fields:
                 try:
                     int(key)
                     parent_table_name = list(graph.parents(key).keys())[0]
                     parent_field = list(
-                        list(graph.parents(key).values())[0]['attr_map'].items())[0][1]
+                        list(graph.parents(key).values())[0]['attr_map'].items())[dependent_fields.index(field)][1]
                 except ValueError:
                     parent_table_name = key
-                    parent_field = [v for v in value['attr_map'].values()][0]
+                    parent_field = [v for v in value['attr_map'].values()][dependent_fields.index(field)]
                 break
 
         parent_table = dj.table.lookup_class_name(
@@ -61,7 +64,7 @@ def get_options(table, field, context=None):
 
         if not parent_table:
             return []
-        options = (eval(parent_table)).fetch(parent_field)
+        options = (dj.U(parent_field) & eval(parent_table)).fetch(parent_field)
 
         if not len(options):
             options = []

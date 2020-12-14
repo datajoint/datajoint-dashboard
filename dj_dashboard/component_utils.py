@@ -172,7 +172,7 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[], mode='add'
                         create_edit_record_table(
                             p, f'{mode}-{table.__name__.lower()}-{p.__name__.lower()}-table',
                             excluded_fields=table.heading.primary_key,
-                            height='100px', width='300px',
+                            height='100px', width='370px',
                             pk_editable=True, deletable=True),
                     ],
                     style={'marginLeft': '1em'}
