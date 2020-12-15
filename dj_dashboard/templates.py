@@ -312,8 +312,10 @@ class TableBlock:
                             self.valid_extra_tables,
                             self.valid_extra_table_fields)
                     ]
-
-            return tuple([data] + extra_table_data + [delete_message])
+            if self.valid_extra_tables:
+                return tuple([data] + extra_table_data + [delete_message])
+            else:
+                return tuple([data] + [delete_message])
 
         def toggle_modal(*args, mode='add'):
 
@@ -381,7 +383,10 @@ class TableBlock:
             else:
                 modal_open = is_open
 
-            return tuple([modal_open] + [modal_data] + modal_data_extra_tables)
+            if self.valid_extra_tables:
+                return tuple([modal_open] + [modal_data] + modal_data_extra_tables)
+            else:
+                return tuple([modal_open] + [modal_data])
 
         @app.callback(
             *self.get_toggle_variables(mode='add')
