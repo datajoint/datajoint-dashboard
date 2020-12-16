@@ -63,9 +63,7 @@ def clean_single_gui_record(d, attrs, master_key=None, add_master_key=False):
         return None
 
 
-def clean_gui_data(table, data, master_key=None, add_master_key=False):
-
-    attrs = table.heading.attributes
+def clean_gui_data(table, data, attrs, master_key=None, add_master_key=False):
 
     clean_data = []
     for d in data:
@@ -77,10 +75,10 @@ def clean_gui_data(table, data, master_key=None, add_master_key=False):
     return clean_data
 
 
-def insert_part_table(part_table, master_key, new_data, msg=''):
+def insert_part_table(part_table, master_key, new_data, attrs, msg=''):
 
     new_data = clean_gui_data(
-        part_table, new_data, master_key, add_master_key=True)
+        part_table, new_data, attrs, master_key, add_master_key=True)
 
     if type(new_data) == str:
         # return the error message
@@ -103,17 +101,12 @@ def insert_part_table(part_table, master_key, new_data, msg=''):
     return msg
 
 
-def update_table(table, new_data, pk=None, msg='Update message:\n'):
+def update_table(table, new_data, pk, msg='Update message:\n'):
 
-    if not pk:
-        pks = table.heading.primary_key
-        if type(new_data) != dict:
-            raise TypeError('new data record has to be a single dictionary.')
+    if type(new_data) != dict:
+        raise TypeError('new data record has to be a single dictionary.')
 
-        pk = {k: v for k, v in new_data.items() if k in pks}
-
-    dj.conn().connect()
-    if not len(table & pk):
+    if set(pk.values()) == {''} or not len(table & pk):
         return msg
     else:
         new = clean_single_gui_record(
@@ -135,9 +128,7 @@ def update_table(table, new_data, pk=None, msg='Update message:\n'):
     return msg
 
 
-def update_part_table(part_table, master_key, new_data, msg=''):
-
-    pks = part_table.heading.primary_key
+def update_part_table(part_table, master_key, new_data, pks, msg=''):
 
     # clean up the new data
     new_data = clean_gui_data(

@@ -48,9 +48,13 @@ class TableBlock:
 
             self.valid_extra_table_fields = [
                 t.heading.names for t in self.valid_extra_tables]
+            self.valid_extra_table_pks = [
+                t.heading.primary_key for t in self.valid_extra_tables]
             self.valid_extra_table_names = [
                 f'{self.table_name}-{t.__name__.lower()}' for t in self.valid_extra_tables]
             self.n_extra_tables = len(self.valid_extra_table_fields)
+
+
 
             display_extra_tables = []
             for t in self.valid_extra_tables:
@@ -462,11 +466,13 @@ class TableBlock:
                         f'\nError inserting into {self.table_name}: {str(e)}'
 
                 if self.valid_extra_tables:
-                    for t, data_t in zip(self.valid_extra_tables,
-                                         new_data_extra_tables):
+                    for t, data_t, fields in zip(
+                            self.valid_extra_tables,
+                            new_data_extra_tables,
+                            self.valid_extra_table_fields):
 
                         add_message = callback_utils.insert_part_table(
-                            t, pk, data_t, msg=add_message)
+                            t, pk, data_t, fields, msg=add_message)
 
             elif triggered_component == f'add-{self.table_name}-close':
                 add_message = 'Add message:'
@@ -506,8 +512,11 @@ class TableBlock:
             msg = callback_utils.update_table(self.table, new, pk)
 
             if self.valid_extra_tables:
-                for t, data_t in zip(self.valid_extra_tables,
-                                     update_data_extra_tables):
+                for t, data_t, extra_table_pks in zip(
+                        self.valid_extra_tables,
+                        update_data_extra_tables,
+                        self.valid_extra_table_pks
+                        ):
                     msg = callback_utils.update_part_table(
-                        t, pk, data_t, msg)
+                        t, pk, data_t, extra_table_pks, msg)
             return msg
