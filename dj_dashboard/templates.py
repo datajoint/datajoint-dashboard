@@ -48,6 +48,8 @@ class TableBlock:
 
             self.valid_extra_table_fields = [
                 t.heading.names for t in self.valid_extra_tables]
+            self.valid_extra_table_attrs = [
+                t.heading.attributes for t in self.valid_extra_tables]
             self.valid_extra_table_pks = [
                 t.heading.primary_key for t in self.valid_extra_tables]
             self.valid_extra_table_names = [
@@ -466,13 +468,13 @@ class TableBlock:
                         f'\nError inserting into {self.table_name}: {str(e)}'
 
                 if self.valid_extra_tables:
-                    for t, data_t, fields in zip(
+                    for t, data_t, attrs in zip(
                             self.valid_extra_tables,
                             new_data_extra_tables,
-                            self.valid_extra_table_fields):
+                            self.valid_extra_table_attrs):
 
                         add_message = callback_utils.insert_part_table(
-                            t, pk, data_t, fields, msg=add_message)
+                            t, pk, data_t, attrs, msg=add_message)
 
             elif triggered_component == f'add-{self.table_name}-close':
                 add_message = 'Add message:'

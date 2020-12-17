@@ -10,7 +10,6 @@ def clean_single_gui_record(d, attrs, master_key=None, add_master_key=False):
                     if k in (set(d.keys()) - set(master_key.keys()))]) != {''}):
 
         for k, v in d.items():
-
             if 'varchar' not in attrs[k].type and v == '':
                 d[k] = None
 
