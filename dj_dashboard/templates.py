@@ -473,8 +473,8 @@ class TableBlock:
                     new_data[0], self.attrs)
 
                 add_message = 'Add message:'
+                pk = self.get_pk(entry)
                 try:
-                    pk = self.get_pk(entry)
                     if (self.table & pk):
                         add_message = add_message + \
                             f'\nWarning: record {pk} exists in database\n'
