@@ -1,4 +1,5 @@
 import datajoint as dj
+from datajoint.diagram import _get_tier
 import dash
 from dash.dependencies import Input, Output, State
 import dash_html_components as html
@@ -26,9 +27,15 @@ class TableBlock:
         self.app = app
         self.table = table
         self.table_name = table.__name__.lower()
+        self.table_original_name = table.__name__
         self.primary_key = table.heading.primary_key
         self.attrs = table.heading.attributes
         self.field_names = table.heading.names
+        self.schema_name = table.database
+        self.table_is_part = _get_tier(self.table.full_table_name) == dj.user_tables.Part
+        if self.table_is_part:
+            self.master_name = self.table._master.__name__
+        self.refreshed = 0
 
         main_display_table = component_utils.create_display_table(
             self.table, f'{self.table_name}-table',
@@ -53,10 +60,21 @@ class TableBlock:
             self.valid_extra_table_pks = [
                 t.heading.primary_key for t in self.valid_extra_tables]
             self.valid_extra_table_names = [
-                f'{self.table_name}-{t.__name__.lower()}' for t in self.valid_extra_tables]
+                f'{self.table_name}-{t.__name__.lower()}'
+                for t in self.valid_extra_tables]
+            self.valid_extra_table_original_names = [
+                t.__name__ for t in self.valid_extra_tables]
             self.n_extra_tables = len(self.valid_extra_table_fields)
+            self.valid_extra_table_schemas = [
+                t.database for t in self.valid_extra_tables]
 
-
+            self.valid_extra_table_is_part = [
+                _get_tier(t.full_table_name) == dj.user_tables.Part
+                for t in self.valid_extra_tables]
+            self.valid_extra_table_master_names = [
+                t._master.__name__ if is_part else None
+                for t, is_part in zip(self.valid_extra_tables,
+                                      self.valid_extra_table_is_part)]
 
             display_extra_tables = []
             for t in self.valid_extra_tables:
@@ -288,13 +306,13 @@ class TableBlock:
                     selected_rows:
                 pk = self.get_pk(data[selected_rows[0]])
                 try:
-                    if '__' in self.table.full_table_name:
+                    if _get_tier(self.table.full_table_name) == dj.user_tables.Part:
                         (self.table & pk).delete(force=True)
                     else:
                         (self.table & pk).delete()
                     delete_message = delete_message + \
                         f'Successfully deleted record {pk}!'
-                except:
+                except Exception as e:
                     delete_message = delete_message + \
                         f'Error in deleting record {pk}: {str(e)}.'
                 data = self.table.fetch(as_dict=True)
@@ -434,6 +452,7 @@ class TableBlock:
             add_record_states
         )
         def add_record(*args):
+
             if len(args) == 4:
                 (n_clicks_add, n_clicks_close,
                  new_data, add_message) = args
@@ -468,13 +487,12 @@ class TableBlock:
                         f'\nError inserting into {self.table_name}: {str(e)}'
 
                 if self.valid_extra_tables:
-                    for t, data_t, attrs in zip(
+                    for t, data_t in zip(
                             self.valid_extra_tables,
-                            new_data_extra_tables,
-                            self.valid_extra_table_attrs):
+                            new_data_extra_tables):
 
                         add_message = callback_utils.insert_part_table(
-                            t, pk, data_t, attrs, msg=add_message)
+                            t, pk, data_t, msg=add_message)
 
             elif triggered_component == f'add-{self.table_name}-close':
                 add_message = 'Add message:'
@@ -514,11 +532,38 @@ class TableBlock:
             msg = callback_utils.update_table(self.table, new, pk)
 
             if self.valid_extra_tables:
-                for t, data_t, extra_table_pks in zip(
+                for t, data_t in zip(
                         self.valid_extra_tables,
-                        update_data_extra_tables,
-                        self.valid_extra_table_pks
-                        ):
+                        update_data_extra_tables):
+
                     msg = callback_utils.update_part_table(
-                        t, pk, data_t, extra_table_pks, msg)
+                        t, pk, data_t, msg)
             return msg
+
+    def refresh_tables(self):
+
+        if not self.refreshed:
+
+            vm = dj.create_virtual_module(
+                self.schema_name, self.schema_name)
+            if self.table_is_part:
+                master_table = getattr(vm, self.master_name)
+                self.table = getattr(master_table, self.table_original_name)
+            else:
+                self.table = getattr(vm, self.table_original_name)
+
+            if self.valid_extra_tables:
+                self.valid_extra_tables = []
+                for schema_name, table_name, is_part, master_name in zip(
+                        self.valid_extra_table_schemas,
+                        self.valid_extra_table_original_names,
+                        self.valid_extra_table_is_part,
+                        self.valid_extra_table_master_names):
+                    vm = dj.create_virtual_module(schema_name, schema_name)
+                    if is_part:
+                        master_table = getattr(vm, master_name)
+                        table = getattr(master_table, table_name)
+                    else:
+                        table = getattr(vm, table_name)
+
+                    self.valid_extra_tables.append(table)
