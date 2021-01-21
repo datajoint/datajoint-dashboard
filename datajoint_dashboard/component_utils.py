@@ -53,7 +53,7 @@ def create_display_table(
                for i in table.heading.names if i not in excluded_fields]
 
     if not width:
-        width = f'{min([120 * len(columns), 1200])}px'
+        width = f'{min([120 * len(columns), 400])}px'
 
     table_style['style_table'].update(
         {
@@ -82,15 +82,18 @@ def create_display_table(
 def create_edit_record_table(
         table, table_id,
         dropdown_fields=[], excluded_fields=[],
-        height='150px', width='1200px',
+        height='100px', width='1200px',
         n_rows=1,
         pk_editable=False,
-        deletable=False):
+        deletable=False,
+        defaults={}):
 
     if not dropdown_fields:
         dropdown_fields = dj_utils.get_dropdown_fields(table)
 
     dropdown_fields = [f for f in dropdown_fields if f not in excluded_fields]
+
+    required_fields = dj_utils.get_required_fields(table)
 
     table_style = copy.deepcopy(table_style_template)
     table_style['style_table'].update(
@@ -107,14 +110,17 @@ def create_edit_record_table(
     heading = table.heading
     columns = [{"name": i, "id": i}
                for i in heading.names if i not in excluded_fields]
-    # some fields are presented as dropdown list
+    columns = [{"name": c['name'] + '*', "id": c['id']}
+               if c['id'] in required_fields else c
+               for c in columns]
+    #some fields are presented as dropdown list
     if dropdown_fields:
         for c in columns:
-            if c['name'] in dropdown_fields:
+            if c['id'] in dropdown_fields:
                 c.update(presentation="dropdown")
 
     for c in columns:
-        if c['name'] in heading.primary_key and not pk_editable:
+        if c['id'] in heading.primary_key and not pk_editable:
             c.update(editable=False)
         else:
             c.update(editable=True)
@@ -122,7 +128,8 @@ def create_edit_record_table(
     return dash_table.DataTable(
         id=table_id,
         columns=columns,
-        data=[{c['id']: dj_utils.get_default(table, c['id'])
+        data=[{c['id']: defaults[c['id']] if c['id'] in defaults.keys()
+               else dj_utils.get_default(table, c['id'])
               for c in columns}] * n_rows,
         persistence=True,
         **table_style,
@@ -138,7 +145,8 @@ def create_edit_record_table(
     )
 
 
-def create_modal(table, id=None, dropdown_fields=[], extra_tables=[], mode='add'):
+def create_modal(table, id=None, dropdown_fields=[], extra_tables=[],
+                 mode='add', defaults={}):
 
     if not id:
         id = table.__name__.lower()
@@ -150,15 +158,17 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[], mode='add'
         table, f'{mode}-{id}-table',
         dropdown_fields=dropdown_fields,
         height='200px', width='800px',
-        pk_editable=mode != 'update')
+        pk_editable=mode != 'update',
+        defaults=defaults)
 
+    # TODO: allow defaults in part table as well
     if extra_tables:
         part_tables = []
         for p in extra_tables:
             part_tables.append(
                 html.Div(
                     [
-                        html.H6(f'   {p.__name__}'),
+                        html.H6(f'{p.__name__}'),
                         html.Button(
                             'Add a row',
                             id=f'{mode}-{table.__name__.lower()}-{p.__name__.lower()}-add-row-button',

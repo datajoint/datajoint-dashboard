@@ -17,6 +17,12 @@ def get_dropdown_fields(table):
             if 'enum' in table.heading.attributes[f].type]
 
 
+def get_required_fields(table):
+    attrs = table.heading.attributes
+
+    return [key for key in attrs.keys() if not attrs[key].default]
+
+
 def get_options(table, field, context=None):
     '''
     For a given table and field, return the options of this field.
@@ -65,6 +71,9 @@ def get_options(table, field, context=None):
         if not parent_table:
             return []
         options = (dj.U(parent_field) & eval(parent_table)).fetch(parent_field)
+
+        if 'int' in dtype or 'decimal' in dtype:
+            options = [str(option) for option in options]
 
         if not len(options):
             options = []

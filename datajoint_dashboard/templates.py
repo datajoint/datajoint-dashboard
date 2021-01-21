@@ -23,6 +23,7 @@ class TableBlock:
                     'height': 50,
                     'marginBottom': '1em',
                     'display': 'block'},
+                 defaults={}
                  ):
         self.app = app
         self.table = table
@@ -36,10 +37,9 @@ class TableBlock:
         if self.table_is_part:
             self.master_name = self.table._master.__name__
         self.refreshed = 0
-
-        main_display_table = component_utils.create_display_table(
-            self.table, f'{self.table_name}-table',
-            height=table_height, width=table_width)
+        self.table_height = table_height
+        self.table_width = table_width
+        self.defaults = defaults
 
         # validate the extra tables
         self.valid_extra_tables = []
@@ -50,6 +50,64 @@ class TableBlock:
                 warnings.warn(
                     f'Extra table {t} is not bound to the master table, \
                       ignored in display.')
+
+        # fixed elements
+        self.add_button = html.Button(
+            children=f'Add a {self.table_name} record',
+            id=f'add-{self.table_name}-button', n_clicks=0,
+            style=button_style)
+
+        self.delete_button = html.Button(
+            children='Delete the current record',
+            id=f'delete-{self.table_name}-button', n_clicks=0,
+            style=button_style
+        )
+
+        self.update_button = html.Button(
+            children='Update the current record',
+            id=f'update-{self.table_name}-button', n_clicks=0,
+            style=button_style
+        )
+
+        self.delete_message_box = dcc.Textarea(
+            id=f'delete-{self.table_name}-message-box',
+            value=f'Delete {self.table.__name__} record message:',
+            style=messagebox_style
+        )
+
+        self.delete_confirm = dcc.ConfirmDialog(
+            id=f'delete-{self.table_name}-confirm',
+            message='Are you sure to delete the record?',
+        )
+
+        self.add_modal = component_utils.create_modal(
+            self.table, self.table_name, extra_tables=self.valid_extra_tables,
+            mode='add', defaults=defaults
+        )
+
+        self.update_modal = component_utils.create_modal(
+            self.table, self.table_name, extra_tables=self.valid_extra_tables,
+            mode='update', defaults=defaults
+        )
+
+        self.construct_layout()
+
+        if self.app is not None and hasattr(self, 'callbacks'):
+            self.callbacks(self.app)
+
+    def construct_layout(
+            self,
+            main_display_table=None,
+            add_modal=None,
+            update_modal=None,
+    ):
+
+        if main_display_table:
+            self.main_display_table = main_display_table
+        else:
+            self.main_display_table = component_utils.create_display_table(
+                self.table, f'{self.table_name}-table',
+                height=self.table_height, width=self.table_width)
 
         if self.valid_extra_tables:
 
@@ -76,15 +134,15 @@ class TableBlock:
                 for t, is_part in zip(self.valid_extra_tables,
                                       self.valid_extra_table_is_part)]
 
-            display_extra_tables = []
+            self.display_extra_tables = []
             for t in self.valid_extra_tables:
-                display_extra_tables.append(
+                self.display_extra_tables.append(
                     html.Div(
                         [
                             html.H6(f'{t.__name__}'),
                             component_utils.create_display_table(
                                 t, f'{self.table_name}-{t.__name__.lower()}-table',
-                                excluded_fields=['subject_id'],
+                                excluded_fields=self.primary_key,
                                 empty_first=True,
                                 height='200px', selectable=False)
                         ]
@@ -97,11 +155,11 @@ class TableBlock:
                                 html.Div(
                                     [
                                         html.H6(f'{self.table.__name__}'),
-                                        main_display_table
-                                    ]
+                                        self.main_display_table
+                                    ],
                                 ),
-                                dbc.Col(display_extra_tables)
-                            ]
+                                dbc.Col(self.display_extra_tables),
+                            ],
                         )
                     ]
                 )
@@ -109,90 +167,63 @@ class TableBlock:
             self.display_table = html.Div(
                 [
                     html.H6(f'{self.table.__name__}'),
-                    main_display_table
+                    self.main_display_table
                 ]
             )
 
-        self.add_button = html.Button(
-            children=f'Add a {self.table_name} record',
-            id=f'add-{self.table_name}-button', n_clicks=0,
-            style=button_style)
+        if add_modal:
+            self.add_modal = add_modal
 
-        self.delete_button = html.Button(
-            children='Delete the current record',
-            id=f'delete-{self.table_name}-button', n_clicks=0,
-            style=button_style
-        )
-
-        self.update_button = html.Button(
-            children='Update the current record',
-            id=f'update-{self.table_name}-button', n_clicks=0,
-            style=button_style
-        )
-
-        self.add_modal = component_utils.create_modal(
-            self.table, self.table_name, extra_tables=extra_tables,
-            mode='add'
-        )
-
-        self.update_modal = component_utils.create_modal(
-            self.table, self.table_name, extra_tables=extra_tables,
-            mode='update'
-        )
-
-        self.delete_message_box = dcc.Textarea(
-            id=f'delete-{self.table_name}-message-box',
-            value=f'Delete {self.table.__name__} record message:',
-            style=messagebox_style
-        )
-
-        self.delete_confirm = dcc.ConfirmDialog(
-            id=f'delete-{self.table_name}-confirm',
-            message='Are you sure to delete the record?',
-        ),
-
-        if self.app is not None and hasattr(self, 'callbacks'):
-            self.callbacks(self.app)
+        if update_modal:
+            self.update_modal = update_modal
 
         self.layout = html.Div(
-            className="row app-body",
-            children=[
-                html.Div(
-                    [
-                        html.Div(
-                            [
-                                html.Div(
-                                    [
-                                        html.Div(
-                                            self.add_button,
-                                            style={'display': 'inline-block'}),
-                                        html.Div(
-                                            self.delete_button,
-                                            style={'display': 'inline-block'}),
-                                        html.Div(
-                                            self.update_button,
-                                            style={'display': 'inline-block'})
-                                    ],
-                                ),
-                                self.delete_message_box,
-                            ]
-                        ),
+            html.Div(
+                className="row app-body",
+                children=[
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                self.add_button,
+                                                style={'display': 'inline-block'}),
 
-                        html.Div(
-                            [
-                                self.display_table
-                            ],
-                            style={'marginRight': '1em',
-                                   'display': 'inline-block'}
-                        ),
-                    ]
-                ),
-                # confirmation dialogue
-                html.Div(self.delete_confirm),
-                # modals
-                self.update_modal,
-                self.add_modal
-            ]
+                                            html.Div(
+                                                self.delete_button,
+                                                style={'display': 'inline-block'}),
+
+                                            html.Div(
+                                                self.update_button,
+                                                style={'display': 'inline-block'})
+                                        ],
+                                    ),
+                                    self.delete_message_box,
+                                ],
+                                style={'marginLeft': '-2.5em', 'display': 'inline-block'}
+                            ),
+
+                            html.Div(
+                                [
+                                    self.display_table
+                                ],
+                                style={'marginRight': '2em',
+                                       'marginLeft': '-2.5em',
+                                       'display': 'inline-block'})
+
+                        ]
+                    ),
+
+                    # confirmation dialogue
+                    html.Div(self.delete_confirm),
+                    # modals
+                    self.update_modal,
+                    self.add_modal
+                ]
+
+            )
         )
 
     def get_pk(self, entry):
@@ -321,7 +352,7 @@ class TableBlock:
                 data = self.table.fetch(as_dict=True)
 
             if self.valid_extra_tables:
-                if selected_rows:
+                if selected_rows and selected_rows[0] < len(data):
                     pk = self.get_pk(data[selected_rows[0]])
                     extra_table_data = [
                         (t & pk).fetch(as_dict=True)
@@ -375,11 +406,18 @@ class TableBlock:
             if triggered_component == f'{mode}-{self.table_name}-button':
                 if selected_rows:
                     modal_data = [data[selected_rows[0]]]
+                    if self.defaults:
+                        modal_data = [{k: self.defaults[k]
+                                       if k in self.defaults.keys()
+                                       else v
+                                       for k, v in modal_data[0].items()}]
                     if self.valid_extra_tables:
                         modal_data_extra_tables = data_extra_tables
                 else:
                     if mode == 'add':
-                        modal_data = [{k: '' for k in self.field_names}]
+                        modal_data = [{k: self.defaults[k] if k in self.defaults.keys()
+                                       else ''
+                                       for k in self.field_names}]
                         if self.valid_extra_tables:
                             modal_data_extra_tables = [
                                 [{k: '' for k in fields

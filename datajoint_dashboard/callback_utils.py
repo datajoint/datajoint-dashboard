@@ -49,12 +49,11 @@ def clean_single_gui_record(d, attrs, master_key=None, add_master_key=False):
                     return f'Invalid numeric value {v}'
 
         if master_key and add_master_key:
-            keys_to_add = {k: v for k, v in master_key.items()
-                           if k not in d.keys()}
-            if keys_to_add:
-                return dict(**keys_to_add, **d)
-            else:
-                return d
+            for k in master_key.keys():
+                if k in d.keys():
+                    d.pop(k)
+
+            return dict(**master_key, **d)
         else:
             return d
 
@@ -83,7 +82,7 @@ def insert_part_table(part_table, master_key, new_data, msg=''):
     if type(new_data) == str:
         # return the error message
         return new_data
-
+    print(new_data)
     try:
         part_table.insert(new_data, skip_duplicates=True)
         msg = msg + 'Successfully inserted records into part table ' + \
