@@ -29,7 +29,7 @@ def create_display_table(
         table, table_id=None,
         height='900px', width=None,
         selectable=True, excluded_fields=[],
-        empty_first=False):
+        empty_first=False, data=None):
 
     if not table_id:
         table_id = table.__name__.lower()
@@ -68,7 +68,7 @@ def create_display_table(
 
     if empty_first:
         data = [{c['id']: '' for c in columns}]
-    else:
+    elif not data:
         data = table.fetch(as_dict=True)
 
     return dash_table.DataTable(
