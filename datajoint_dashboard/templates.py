@@ -152,16 +152,6 @@ class TableBlock:
             message='Are you sure to delete the record?',
         )
 
-        self.add_modal = component_utils.create_modal(
-            self.table, self.table_name, extra_tables=self.valid_extra_tables,
-            mode='add', defaults=defaults
-        )
-
-        self.update_modal = component_utils.create_modal(
-            self.table, self.table_name, extra_tables=self.valid_extra_tables,
-            mode='update', defaults=defaults
-        )
-
         self.construct_layout()
 
         if self.app is not None and hasattr(self, 'callbacks'):
@@ -181,6 +171,16 @@ class TableBlock:
                 self.table, f'{self.table_name}-table',
                 height=self.table_height, width=self.table_width,
                 data=self.main_table_data)
+
+        self.add_modal = component_utils.create_modal(
+            self.table, self.table_name, extra_tables=self.valid_extra_tables,
+            mode='add', defaults=self.defaults
+        )
+
+        self.update_modal = component_utils.create_modal(
+            self.table, self.table_name, extra_tables=self.valid_extra_tables,
+            mode='update', defaults=self.defaults
+        )
 
         if self.valid_extra_tables:
 
@@ -410,6 +410,9 @@ class TableBlock:
             n_clicks_add_close, n_clicks_delete, n_clicks_update_close, selected_rows = args[0:4]
             data = args[-1]
             filter_values = args[4:-1]
+            if filter_values:
+                filter_values = filter_values[0]
+
             if hasattr(self, 'filters') and len(filter_values) != len(self.filters.values()):
                 raise ValueError('Number of filter value inputs does not match the number of filters')
 
@@ -532,9 +535,6 @@ class TableBlock:
 
             elif triggered_component == f'{mode}-{self.table_name}-close':
                 modal_open = not is_open if n_open or n_close else is_open
-
-            elif 'filter' in triggered_component:
-                pass
 
             else:
                 modal_open = is_open
