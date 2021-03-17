@@ -8,7 +8,70 @@ import dash_bootstrap_components as dbc
 from . import dj_utils, component_utils, callback_utils
 import warnings
 
+
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
 DataJointTable = dj.user_tables.OrderedClass
+
+
+class Filter:
+    def __init__(self, table, field_name,
+                 query_function,
+                 filter_id=None,
+                 default_value=None,
+                 multi=False,
+                 filter_style=None):
+        """Filter object that is able to update its options
+
+        Args:
+            name ([type]): [description]
+            table ([type]): [description]
+        """
+        self.query = {}
+        self.table = table
+        self.field_name = field_name
+        self.query_function = query_function
+        self.filter_id = filter_id if filter_id else field_name + '-filter'
+
+        self.options = (dj.U(self.field_name) & self.table).fetch(
+            self.field_name)
+        self.default_value = default_value
+        self.layout = dcc.Dropdown(
+            id=self.filter_id,
+            options=[{'label': i, 'value': i} for i in self.options],
+            value=self.default_value,
+            style={'width': '200px', 'marginBottom': '0.5em'},
+            placeholder=f'Select {field_name}...',
+            multi=multi
+        )
+
+    @property
+    def get_options(self, query):
+        return (dj.U(self.name) &
+                (self.table & query)).fetch(self.name)
+
+    def update_query(self, values):
+        self.query = self.query_function(self.table, values)
+
+
+class FilterCollection:
+    def __init__(self, filters: list):
+
+        self.filters = {f.filter_id: f for f in filters}
+        self.layout = html.Div(
+            [f.layout for f in self.filters.values()],
+            style={'display': 'inline-block'}
+        )
+
+    def apply_filters(self, table: DataJointTable):
+        query = table
+        for f in self.filters.values():
+            query = query & f.query
+        return query
 
 
 class TableBlock:
@@ -23,10 +86,12 @@ class TableBlock:
                     'height': 50,
                     'marginBottom': '1em',
                     'display': 'block'},
-                 defaults={}
+                 defaults={},
+                 filters=[]
                  ):
         self.app = app
         self.table = table
+        self.main_table_data = table.fetch(as_dict=True)
         self.table_name = table.__name__.lower()
         self.table_original_name = table.__name__
         self.primary_key = table.heading.primary_key
@@ -40,6 +105,13 @@ class TableBlock:
         self.table_height = table_height
         self.table_width = table_width
         self.defaults = defaults
+
+        if filters:
+            self.filter_collection = FilterCollection(filters)
+            self.filter_collection_layout = self.filter_collection.layout
+        else:
+            self.filter_collection = AttrDict(filters={})
+            self.filter_collection_layout = html.Div()
 
         # validate the extra tables
         self.valid_extra_tables = []
@@ -80,16 +152,6 @@ class TableBlock:
             message='Are you sure to delete the record?',
         )
 
-        self.add_modal = component_utils.create_modal(
-            self.table, self.table_name, extra_tables=self.valid_extra_tables,
-            mode='add', defaults=defaults
-        )
-
-        self.update_modal = component_utils.create_modal(
-            self.table, self.table_name, extra_tables=self.valid_extra_tables,
-            mode='update', defaults=defaults
-        )
-
         self.construct_layout()
 
         if self.app is not None and hasattr(self, 'callbacks'):
@@ -107,7 +169,18 @@ class TableBlock:
         else:
             self.main_display_table = component_utils.create_display_table(
                 self.table, f'{self.table_name}-table',
-                height=self.table_height, width=self.table_width)
+                height=self.table_height, width=self.table_width,
+                data=self.main_table_data)
+
+        self.add_modal = component_utils.create_modal(
+            self.table, self.table_name, extra_tables=self.valid_extra_tables,
+            mode='add', defaults=self.defaults
+        )
+
+        self.update_modal = component_utils.create_modal(
+            self.table, self.table_name, extra_tables=self.valid_extra_tables,
+            mode='update', defaults=self.defaults
+        )
 
         if self.valid_extra_tables:
 
@@ -201,6 +274,7 @@ class TableBlock:
                                         ],
                                     ),
                                     self.delete_message_box,
+                                    self.filter_collection_layout,
                                 ],
                                 style={'marginLeft': '-2.5em', 'display': 'inline-block'}
                             ),
@@ -301,6 +375,7 @@ class TableBlock:
                 return True
             return False
 
+        # ---------------------- callback update table data ------------------------
         if not self.valid_extra_tables:
             update_table_data_outputs = [
                 Output(f'{self.table_name}-table', 'data'),
@@ -313,21 +388,33 @@ class TableBlock:
                  for t in self.valid_extra_tables] + \
                 [Output(f'delete-{self.table_name}-message-box', 'value')]
 
+        update_table_data_inputs = [
+            Input(f'add-{self.table_name}-close', 'n_clicks'),
+            Input(f'delete-{self.table_name}-confirm', 'submit_n_clicks'),
+            Input(f'update-{self.table_name}-close', 'n_clicks'),
+            Input(f'{self.table_name}-table', 'selected_rows')
+        ]
+        if self.filter_collection.filters:
+            update_table_data_inputs += [
+                Input(f.filter_id, 'value') for f in self.filter_collection.filters.values()
+            ]
+
         @app.callback(
             update_table_data_outputs,
-            [
-                Input(f'add-{self.table_name}-close', 'n_clicks'),
-                Input(f'delete-{self.table_name}-confirm', 'submit_n_clicks'),
-                Input(f'update-{self.table_name}-close', 'n_clicks'),
-                Input(f'{self.table_name}-table', 'selected_rows')
-            ],
+            update_table_data_inputs,
             [
                 State(f'{self.table_name}-table', 'data'),
             ]
         )
-        def update_table_data(
-                n_clicks_add_close, n_clicks_delete, n_clicks_update_close,
-                selected_rows, data):
+        def update_table_data(*args):
+            n_clicks_add_close, n_clicks_delete, n_clicks_update_close, selected_rows = args[0:4]
+            data = args[-1]
+            filter_values = args[4:-1]
+            if filter_values:
+                filter_values = filter_values[0]
+
+            if hasattr(self, 'filters') and len(filter_values) != len(self.filters.values()):
+                raise ValueError('Number of filter value inputs does not match the number of filters')
 
             delete_message = f'Delete {self.table.__name__} record message:\n'
             ctx = dash.callback_context
@@ -347,9 +434,16 @@ class TableBlock:
                     delete_message = delete_message + \
                         f'Error in deleting record {pk}: {str(e)}.'
                 data = self.table.fetch(as_dict=True)
+                self.main_table_data = data
             elif triggered_component in (f'add-{self.table_name}-close',
                                          f'update-{self.table_name}-close'):
                 data = self.table.fetch(as_dict=True)
+                self.main_table_data = data
+            elif 'filter' in triggered_component:
+                f = self.filter_collection.filters[triggered_component]
+                f.update_query(filter_values)
+                query = self.filter_collection.apply_filters(self.table)
+                data = query.fetch(as_dict=True)
 
             if self.valid_extra_tables:
                 if selected_rows and selected_rows[0] < len(data):
