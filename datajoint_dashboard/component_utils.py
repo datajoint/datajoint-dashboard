@@ -75,7 +75,7 @@ def create_display_table(
         id=table_id,
         columns=columns,
         data=data,
-        **table_style
+        **table_style,
     )
 
 
@@ -113,7 +113,7 @@ def create_edit_record_table(
     columns = [{"name": c['name'] + '*', "id": c['id']}
                if c['id'] in required_fields else c
                for c in columns]
-    #some fields are presented as dropdown list
+    # some fields are presented as dropdown list
     if dropdown_fields:
         for c in columns:
             if c['id'] in dropdown_fields:
@@ -167,7 +167,8 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[],
         for p in extra_tables:
             part_tables.append(
                 html.Div(
-                    [
+                    id=f'{mode}-{table.__name__.lower()}-{p.__name__.lower()}-table-div',
+                    children=[
                         html.H6(f'{p.__name__}'),
                         html.Button(
                             'Add a row',

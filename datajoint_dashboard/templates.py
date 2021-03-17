@@ -87,8 +87,7 @@ class TableBlock:
                     'marginBottom': '1em',
                     'display': 'block'},
                  defaults={},
-                 filters=[]
-                 ):
+                 filters=[]):
         self.app = app
         self.table = table
         self.main_table_data = table.fetch(as_dict=True)
@@ -161,7 +160,7 @@ class TableBlock:
             self,
             main_display_table=None,
             add_modal=None,
-            update_modal=None,
+            update_modal=None
     ):
 
         if main_display_table:
@@ -211,7 +210,8 @@ class TableBlock:
             for t in self.valid_extra_tables:
                 self.display_extra_tables.append(
                     html.Div(
-                        [
+                        id=f'{self.table_name}-{t.__name__.lower()}-table-div',
+                        children=[
                             html.H6(f'{t.__name__}'),
                             component_utils.create_display_table(
                                 t, f'{self.table_name}-{t.__name__.lower()}-table',
