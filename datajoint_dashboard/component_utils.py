@@ -5,6 +5,7 @@ import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import copy
 from . import dj_utils
+import re
 
 table_style_template = dict(
     style_cell={
@@ -65,6 +66,16 @@ def create_display_table(
             'maxWidth': width
         }
     )
+    table_style['style_cell'].update(
+        {
+            'textAlign': 'left',
+            'fontSize': 12,
+            'font-family': 'helvetica',
+            'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
+            'height': 'auto',
+            'whiteSpace': 'normal'
+        }
+    )
 
     if empty_first:
         data = [{c['id']: '' for c in columns}]
@@ -106,13 +117,32 @@ def create_edit_record_table(
             'maxWidth': width
         }
     )
-
+    table_style['style_cell'].update(
+        {
+            'textAlign': 'left',
+            'fontSize': 12,
+            'font-family': 'helvetica',
+            'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
+            'height': 'auto',
+            'whiteSpace': 'normal'
+        }
+    )
     heading = table.heading
-    columns = [{"name": i, "id": i}
+    columns = [{'name': i, 'id': i}
                for i in heading.names if i not in excluded_fields]
-    columns = [{"name": c['name'] + '*', "id": c['id']}
-               if c['id'] in required_fields else c
-               for c in columns]
+    # contruct a comprehensive name of column
+    for c in columns:
+        if c['id'] in required_fields:
+            c['name'] = c['name'] + '*'
+        # add data type
+        dtype = heading.attributes[c['id']].type
+        # if there is unit
+        unit = re.search(r'^\((.+)\)', heading.attributes[c['id']].comment)
+        if unit:
+            dtype = dtype + f'; {unit.group(1)}'
+
+        c['name'] = c['name'] + f' ({dtype})'
+
     # some fields are presented as dropdown list
     if dropdown_fields:
         for c in columns:
