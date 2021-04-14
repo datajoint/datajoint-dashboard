@@ -19,8 +19,8 @@ DataJointTable = dj.user_tables.OrderedClass
 
 
 class Filter:
-    def __init__(self, table, field_name,
-                 query_function,
+    def __init__(self, table: DataJointTable, field_name,
+                 restrictor_constructor,
                  filter_id=None,
                  default_value=None,
                  multi=False,
@@ -28,17 +28,21 @@ class Filter:
         """Filter object that is able to update its options
 
         Args:
-            name ([type]): [description]
-            table ([type]): [description]
+            table (DataJoint table): DataJoint table that contains the field to be filtered, usually not the main table of the webpage.
+            field_name (str): field name to be filterd
+            restrictor_constructor (function): function that constructs a restrictor with the selected filter values, ready to restrict the main table.
+            filter_id (str, optional): filter component id. Defaults to None. If None, a filter id will be automatically assigned.
+            default_value ([str, optional): default value of the filter. Defaults to None.
+            multi (bool, optional): whether it is a filter that allows multiple choices. Defaults to False.
+            filter_style (dict, optional): css style of filter dropdown component. Defaults to None. If None, a default style will be automatically assigned.
         """
-        self.query = {}
+        self.restrictor = {}
         self.table = table
         self.field_name = field_name
-        self.query_function = query_function
+        self.restrictor_constructor = restrictor_constructor
         self.filter_id = filter_id if filter_id else field_name + '-filter'
 
-        self.options = (dj.U(self.field_name) & self.table).fetch(
-            self.field_name)
+        self.options = self.get_options()
         self.default_value = default_value
         self.layout = dcc.Dropdown(
             id=self.filter_id,
@@ -49,13 +53,21 @@ class Filter:
             multi=multi
         )
 
-    @property
-    def get_options(self, query):
-        return (dj.U(self.name) &
-                (self.table & query)).fetch(self.name)
+    def get_options(self):
+        """get options for the current filter dropdown component
 
-    def update_query(self, values):
-        self.query = self.query_function(self.table, values)
+        Returns:
+            list: list of options of the current filter.
+        """
+        return (dj.U(self.field_name) & self.table).fetch(self.field_name)
+
+    def update_restrictor(self, values):
+        """updates restrictor based on the selected value(s) of the filter
+
+        Args:
+            values (str or list): value or values of the current filter after selection.
+        """
+        self.restrictor = self.restrictor_constructor(self.table, values)
 
 
 class FilterCollection:
@@ -70,7 +82,7 @@ class FilterCollection:
     def apply_filters(self, table: DataJointTable):
         query = table
         for f in self.filters.values():
-            query = query & f.query
+            query = query & f.restrictor
         return query
 
 
@@ -104,9 +116,10 @@ class TableBlock:
         self.table_height = table_height
         self.table_width = table_width
         self.defaults = defaults
+        self.filters = filters
 
-        if filters:
-            self.filter_collection = FilterCollection(filters)
+        if self.filters:
+            self.filter_collection = FilterCollection(self.filters)
             self.filter_collection_layout = self.filter_collection.layout
         else:
             self.filter_collection = AttrDict(filters={})
@@ -387,6 +400,10 @@ class TableBlock:
                 [Output(f'{self.table_name}-{t.__name__.lower()}-table', 'data')
                  for t in self.valid_extra_tables] + \
                 [Output(f'delete-{self.table_name}-message-box', 'value')]
+        if self.filter_collection.filters:
+            update_table_data_outputs += [
+                Output(f.filter_id, 'options') for f in self.filter_collection.filters.values()
+            ]
 
         update_table_data_inputs = [
             Input(f'add-{self.table_name}-close', 'n_clicks'),
@@ -413,9 +430,6 @@ class TableBlock:
             if filter_values:
                 filter_values = filter_values[0]
 
-            if hasattr(self, 'filters') and len(filter_values) != len(self.filters.values()):
-                raise ValueError('Number of filter value inputs does not match the number of filters')
-
             delete_message = f'Delete {self.table.__name__} record message:\n'
             ctx = dash.callback_context
             triggered_component = ctx.triggered[0]['prop_id'].split('.')[0]
@@ -441,7 +455,7 @@ class TableBlock:
                 self.main_table_data = data
             elif 'filter' in triggered_component:
                 f = self.filter_collection.filters[triggered_component]
-                f.update_query(filter_values)
+                f.update_restrictor(filter_values)
                 query = self.filter_collection.apply_filters(self.table)
                 data = query.fetch(as_dict=True)
 
@@ -461,10 +475,23 @@ class TableBlock:
                             self.valid_extra_tables,
                             self.valid_extra_table_fields)
                     ]
+
+            # Update filter options if there are filters in the page
+            if self.filter_collection.filters:
+                filter_options = [
+                    [{'label': i, 'value': i} for i in f.get_options()]
+                    for f in self.filter_collection.filters.values()]
+
             if self.valid_extra_tables:
-                return tuple([data] + extra_table_data + [delete_message])
+                if self.filter_collection.filters:
+                    return tuple([data] + extra_table_data + [delete_message] + filter_options)
+                else:
+                    return tuple([data] + extra_table_data + [delete_message])
             else:
-                return tuple([data] + [delete_message])
+                if self.filter_collection.filters:
+                    return tuple([data] + [delete_message] + filter_options)
+                else:
+                    return tuple([data] + [delete_message])
 
         def toggle_modal(*args, mode='add'):
 
