@@ -55,6 +55,7 @@ class Filter:
         """
         self.query_function = query_function
         self.filter_id = filter_id
+        self.filter_name = filter_name
 
         if options:
             self.options = options
@@ -77,7 +78,6 @@ class Filter:
             options=[{'label': i, 'value': i} for i in self.options],
             value=self.default_value,
             style=self.filter_style,
-            placeholder=f'Select {filter_name}...',
             multi=multi
         )
         self.update_restrictor(default_value)
@@ -95,8 +95,14 @@ class FilterCollection:
 
         self.filters = OrderedDict({f.filter_id: f for f in filter_list})
         self.layout = html.Div(
-            [html.Div(f.layout, style={'display': 'inline-block'})
-             for f in self.filters.values()])
+            children=[
+                html.Div([f'{f.filter_name}', f.layout],
+                         style={'display': 'inline-block',
+                                'marginRight': '1em',
+                                'marginBottom': '1em'})
+                for f in self.filters.values()
+            ]
+        )
 
     def apply_filters(self, table: DataJointTable):
         return table & dj.AndList([f.restrictor for f in self.filters.values()])
