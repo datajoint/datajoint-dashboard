@@ -7,6 +7,7 @@ import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 from . import dj_utils, component_utils, callback_utils
 import warnings
+from collections import OrderedDict
 
 
 class AttrDict(dict):
@@ -19,59 +20,86 @@ DataJointTable = dj.user_tables.OrderedClass
 
 
 class Filter:
-    def __init__(self, table, field_name,
+    def __init__(self,
                  query_function,
-                 filter_id=None,
-                 default_value=None,
+                 filter_id,
+                 filter_name,
+                 options=None,
                  multi=False,
+                 table=None,
+                 field_name=None,
+                 default_value=None,
                  filter_style=None):
         """Filter object that is able to update its options
 
         Args:
-            name ([type]): [description]
-            table ([type]): [description]
+            query_function (function): user function providing the restrictor
+                that could be directly used to restrict the main table,
+                the argument is the selected `value` (multi=False) or
+                `values` (multi=True) from the filter. if multi=False,
+                query_function should provide results for option 'All'
+            filter_id (str): id of the filter object in the dash app
+            options (list, optional): option list of this filter. If not None,
+                the user is responsible to make sure all options values gives
+                correct results from query_function.
+            multi (boolean, optional): this filter is a single or
+                multi option filter. Default is False.
+            table (DataJoint table object, optional): the table where
+                field_name comes from. Mandatory if options are not specified
+            field_name (str, optional): field name in table that serves as
+                the filter. Mandatory if options are not specified.
+            default_value (single value or list): the default value of this
+                filter for the first load.Single value if multi=False,
+                list if multi=True
+            filter_style (dict): css style for the filter
         """
-        self.query = {}
-        self.table = table
-        self.field_name = field_name
         self.query_function = query_function
-        self.filter_id = filter_id if filter_id else field_name + '-filter'
+        self.filter_id = filter_id
 
-        self.options = (dj.U(self.field_name) & self.table).fetch(
-            self.field_name)
+        if options:
+            self.options = options
+        else:
+            if table and field_name:
+                self.options = self.get_options()
+                if not multi:
+                    self.options = self.options + ['All']
+            else:
+                raise ValueError('table and field_name are required when options are not specified.')
+
         self.default_value = default_value
+        if filter_style:
+            self.filter_style = filter_style
+        else:
+            self.filter_style = {'width': '200px', 'marginBottom': '0.5em'}
+
         self.layout = dcc.Dropdown(
             id=self.filter_id,
             options=[{'label': i, 'value': i} for i in self.options],
             value=self.default_value,
-            style={'width': '200px', 'marginBottom': '0.5em'},
-            placeholder=f'Select {field_name}...',
+            style=self.filter_style,
+            placeholder=f'Select {filter_name}...',
             multi=multi
         )
+        self.update_restrictor(default_value)
 
-    @property
-    def get_options(self, query):
-        return (dj.U(self.name) &
-                (self.table & query)).fetch(self.name)
+    def get_options(self, query={}):
+        return (dj.U(self.field_name) &
+                (self.table & query)).fetch(self.field_name)
 
-    def update_query(self, values):
-        self.query = self.query_function(self.table, values)
+    def update_restrictor(self, values):
+        self.restrictor = self.query_function(values)
 
 
 class FilterCollection:
-    def __init__(self, filters: list):
+    def __init__(self, filter_list: list):
 
-        self.filters = {f.filter_id: f for f in filters}
+        self.filters = OrderedDict({f.filter_id: f for f in filter_list})
         self.layout = html.Div(
-            [f.layout for f in self.filters.values()],
-            style={'display': 'inline-block'}
-        )
+            [html.Div(f.layout, style={'display': 'inline-block'})
+             for f in self.filters.values()])
 
     def apply_filters(self, table: DataJointTable):
-        query = table
-        for f in self.filters.values():
-            query = query & f.query
-        return query
+        return table & dj.AndList([f.restrictor for f in self.filters.values()])
 
 
 class TableBlock:
@@ -87,10 +115,25 @@ class TableBlock:
                     'marginBottom': '1em',
                     'display': 'block'},
                  defaults={},
-                 filters=[]):
+                 filters=[],
+                 empty_first=False):
         self.app = app
         self.table = table
-        self.main_table_data = table.fetch(as_dict=True)
+
+        if filters:
+            self.filter_collection = FilterCollection(filters)
+            self.filter_collection_layout = self.filter_collection.layout
+            query = self.filter_collection.apply_filters(self.table)
+
+        else:
+            self.filter_collection = AttrDict(filters={})
+            self.filter_collection_layout = html.Div()
+            query = self.table
+
+        if empty_first:
+            self.main_table_data = []
+        else:
+            self.main_table_data = query.fetch(as_dict=True)
         self.table_name = table.__name__.lower()
         self.table_original_name = table.__name__
         self.primary_key = table.heading.primary_key
@@ -104,13 +147,6 @@ class TableBlock:
         self.table_height = table_height
         self.table_width = table_width
         self.defaults = defaults
-
-        if filters:
-            self.filter_collection = FilterCollection(filters)
-            self.filter_collection_layout = self.filter_collection.layout
-        else:
-            self.filter_collection = AttrDict(filters={})
-            self.filter_collection_layout = html.Div()
 
         # validate the extra tables
         self.valid_extra_tables = []
@@ -410,11 +446,14 @@ class TableBlock:
             n_clicks_add_close, n_clicks_delete, n_clicks_update_close, selected_rows = args[0:4]
             data = args[-1]
             filter_values = args[4:-1]
-            if filter_values:
-                filter_values = filter_values[0]
 
-            if hasattr(self, 'filters') and len(filter_values) != len(self.filters.values()):
+            if hasattr(self, 'filters') and len(filter_values) != len(self.filter_collection.filters.values()):
                 raise ValueError('Number of filter value inputs does not match the number of filters')
+
+            filter_values_dict = {
+                k: f_value
+                for k, f_value in
+                zip(self.filter_collection.filters.keys(), filter_values)}
 
             delete_message = f'Delete {self.table.__name__} record message:\n'
             ctx = dash.callback_context
@@ -441,7 +480,7 @@ class TableBlock:
                 self.main_table_data = data
             elif 'filter' in triggered_component:
                 f = self.filter_collection.filters[triggered_component]
-                f.update_query(filter_values)
+                f.update_restrictor(filter_values_dict[triggered_component])
                 query = self.filter_collection.apply_filters(self.table)
                 data = query.fetch(as_dict=True)
 

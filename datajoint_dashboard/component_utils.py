@@ -79,7 +79,7 @@ def create_display_table(
 
     if empty_first:
         data = [{c['id']: '' for c in columns}]
-    elif not data:
+    elif data is None:
         data = table.fetch(as_dict=True)
 
     return dash_table.DataTable(
