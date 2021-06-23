@@ -82,7 +82,7 @@ def insert_part_table(part_table, master_key, new_data, msg=''):
     if type(new_data) == str:
         # return the error message
         return new_data
-    print(new_data)
+
     try:
         part_table.insert(new_data, skip_duplicates=True)
         msg = msg + 'Successfully inserted records into part table ' + \

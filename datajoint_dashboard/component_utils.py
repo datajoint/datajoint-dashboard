@@ -15,12 +15,12 @@ table_style_template = dict(
         'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
         'height': '30px'
         },
-    page_action='none',
+    page_action='native',
+    page_size=50,
     style_table={
         'minWidth': '1200px',
         'width': '1200px',
-        'maxWidth': '1200px',
-        'overflowX': 'auto'},
+        'maxWidth': '1200px'},
     style_header={
         'backgroundColor': 'rgb(220, 220, 220)',
         'fontWeight': 'bold'})
