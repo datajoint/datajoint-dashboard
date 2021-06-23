@@ -49,7 +49,7 @@ class Filter:
             field_name (str, optional): field name in table that serves as
                 the filter. Mandatory if options are not specified.
             default_value (single value or list): the default value of this
-                filter for the first load.Single value if multi=False,
+                filter for the first load. Single value if multi=False,
                 list if multi=True
             filter_style (dict): css style for the filter
         """
@@ -79,7 +79,8 @@ class Filter:
             value=self.default_value,
             style=self.filter_style,
             multi=multi,
-            persistence=True
+            persistence=True,
+            persistence_type='memory'
         )
         self.update_restrictor(default_value)
 
