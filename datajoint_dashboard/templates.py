@@ -78,7 +78,8 @@ class Filter:
             options=[{'label': i, 'value': i} for i in self.options],
             value=self.default_value,
             style=self.filter_style,
-            multi=multi
+            multi=multi,
+            persistence=True
         )
         self.update_restrictor(default_value)
 
