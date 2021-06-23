@@ -7,7 +7,7 @@ import copy
 from . import dj_utils
 import re
 
-table_style_template = dict(
+table_style_template_display = dict(
     style_cell={
         'textAlign': 'left',
         'fontSize': 12,
@@ -25,6 +25,24 @@ table_style_template = dict(
         'backgroundColor': 'rgb(220, 220, 220)',
         'fontWeight': 'bold'})
 
+table_style_template_edit = dict(
+    style_cell={
+        'textAlign': 'left',
+        'fontSize': 12,
+        'font-family': 'helvetica',
+        'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
+        'height': '30px'
+        },
+    page_action='none',
+    style_table={
+        'minWidth': '1200px',
+        'width': '1200px',
+        'maxWidth': '1200px',
+        'overflowX': 'auto'},
+    style_header={
+        'backgroundColor': 'rgb(220, 220, 220)',
+        'fontWeight': 'bold'})
+
 
 def create_display_table(
         table, table_id=None,
@@ -35,7 +53,7 @@ def create_display_table(
     if not table_id:
         table_id = table.__name__.lower()
 
-    table_style = copy.deepcopy(table_style_template)
+    table_style = copy.deepcopy(table_style_template_display)
     table_style.update(
         fixed_columns={'headers': True, 'data': 1},
         # allow sorting
@@ -106,7 +124,7 @@ def create_edit_record_table(
 
     required_fields = dj_utils.get_required_fields(table)
 
-    table_style = copy.deepcopy(table_style_template)
+    table_style = copy.deepcopy(table_style_template_edit)
     table_style['style_table'].update(
         {
             'minHeight': height,
