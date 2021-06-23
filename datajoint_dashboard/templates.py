@@ -129,17 +129,17 @@ class TableBlock:
         if filters:
             self.filter_collection = FilterCollection(filters)
             self.filter_collection_layout = self.filter_collection.layout
-            query = self.filter_collection.apply_filters(self.table)
+            self.query = self.filter_collection.apply_filters(self.table)
 
         else:
             self.filter_collection = AttrDict(filters={})
             self.filter_collection_layout = html.Div()
-            query = self.table
+            self.query = self.table
 
         if empty_first:
             self.main_table_data = []
         else:
-            self.main_table_data = query.fetch(as_dict=True)
+            self.main_table_data = self.query.fetch(as_dict=True)
         self.table_name = table.__name__.lower()
         self.table_original_name = table.__name__
         self.primary_key = table.heading.primary_key
@@ -453,7 +453,8 @@ class TableBlock:
             data = args[-1]
             filter_values = args[4:-1]
 
-            if hasattr(self, 'filters') and len(filter_values) != len(self.filter_collection.filters.values()):
+            if hasattr(self, 'filters') and \
+                    len(filter_values) != len(self.filter_collection.filters.values()):
                 raise ValueError('Number of filter value inputs does not match the number of filters')
 
             filter_values_dict = {
@@ -478,17 +479,18 @@ class TableBlock:
                 except Exception as e:
                     delete_message = delete_message + \
                         f'Error in deleting record {pk}: {str(e)}.'
-                data = self.table.fetch(as_dict=True)
+                data = self.query.fetch(as_dict=True)
                 self.main_table_data = data
             elif triggered_component in (f'add-{self.table_name}-close',
                                          f'update-{self.table_name}-close'):
-                data = self.table.fetch(as_dict=True)
+                data = self.query.fetch(as_dict=True)
                 self.main_table_data = data
             elif 'filter' in triggered_component:
                 f = self.filter_collection.filters[triggered_component]
                 f.update_restrictor(filter_values_dict[triggered_component])
-                query = self.filter_collection.apply_filters(self.table)
-                data = query.fetch(as_dict=True)
+                self.query = self.filter_collection.apply_filters(self.table)
+                data = self.query.fetch(as_dict=True)
+                self.main_table_data = data
 
             if self.valid_extra_tables:
                 if selected_rows and selected_rows[0] < len(data):
