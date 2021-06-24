@@ -22,9 +22,9 @@ DataJointTable = dj.user_tables.OrderedClass
 class Filter:
     def __init__(self,
                  query_function,
+                 get_options,
                  filter_id,
                  filter_name,
-                 options=None,
                  multi=False,
                  table=None,
                  field_name=None,
@@ -39,9 +39,8 @@ class Filter:
                 `values` (multi=True) from the filter. if multi=False,
                 query_function should provide results for option 'All'
             filter_id (str): id of the filter object in the dash app
-            options (list, optional): option list of this filter. If not None,
-                the user is responsible to make sure all options values gives
-                correct results from query_function.
+            get_options (list, optional): a function that returns all the options
+                based on the table status.
             multi (boolean, optional): this filter is a single or
                 multi option filter. Default is False.
             table (DataJoint table object, optional): the table where
@@ -54,18 +53,10 @@ class Filter:
             filter_style (dict): css style for the filter
         """
         self.query_function = query_function
+        self.get_options = get_options
         self.filter_id = filter_id
         self.filter_name = filter_name
-
-        if options:
-            self.options = options
-        else:
-            if table and field_name:
-                self.options = self.get_options()
-                if not multi:
-                    self.options = self.options + ['All']
-            else:
-                raise ValueError('table and field_name are required when options are not specified.')
+        self.options = self.get_options()
 
         self.default_value = default_value
         if filter_style:
@@ -84,9 +75,6 @@ class Filter:
         )
         self.update_restrictor(default_value)
 
-    def get_options(self, query={}):
-        return (dj.U(self.field_name) &
-                (self.table & query)).fetch(self.field_name)
 
     def update_restrictor(self, values):
         self.restrictor = self.query_function(values)
@@ -155,6 +143,7 @@ class TableBlock:
         self.table_height = table_height
         self.table_width = table_width
         self.defaults = defaults
+        self.filters = filters
 
         # validate the extra tables
         self.valid_extra_tables = []
@@ -431,6 +420,10 @@ class TableBlock:
                 [Output(f'{self.table_name}-{t.__name__.lower()}-table', 'data')
                  for t in self.valid_extra_tables] + \
                 [Output(f'delete-{self.table_name}-message-box', 'value')]
+        if self.filter_collection.filters:
+            update_table_data_outputs += [
+                Output(f.filter_id, 'options') for f in self.filter_collection.filters.values()
+            ]
 
         update_table_data_inputs = [
             Input(f'add-{self.table_name}-close', 'n_clicks'),
@@ -510,10 +503,23 @@ class TableBlock:
                             self.valid_extra_tables,
                             self.valid_extra_table_fields)
                     ]
+
+            # Update filter options if there are filters in the page
+            if self.filter_collection.filters:
+                filter_options = [
+                    [{'label': i, 'value': i} for i in f.get_options()]
+                    for f in self.filter_collection.filters.values()]
+
             if self.valid_extra_tables:
-                return tuple([data] + extra_table_data + [delete_message])
+                if self.filter_collection.filters:
+                    return tuple([data] + extra_table_data + [delete_message] + filter_options)
+                else:
+                    return tuple([data] + extra_table_data + [delete_message])
             else:
-                return tuple([data] + [delete_message])
+                if self.filter_collection.filters:
+                    return tuple([data] + [delete_message] + filter_options)
+                else:
+                    return tuple([data] + [delete_message])
 
         def toggle_modal(*args, mode='add'):
 
