@@ -309,7 +309,7 @@ class TableBlock:
                                     self.delete_message_box,
                                     self.filter_collection_layout,
                                 ],
-                                style={'marginLeft': '-2.5em', 'display': 'inline-block'}
+                                style={'display': 'inline-block'}
                             ),
 
                             html.Div(
@@ -317,7 +317,6 @@ class TableBlock:
                                     self.display_table
                                 ],
                                 style={'marginRight': '2em',
-                                       'marginLeft': '-2.5em',
                                        'display': 'inline-block'})
 
                         ]
