@@ -81,7 +81,7 @@ def create_display_table(
             'maxHeight': height,
             'minWidth': width,
             'width': width,
-            'maxWidth': width
+            'maxWidth': width,
         }
     )
     table_style['style_cell'].update(
@@ -89,9 +89,16 @@ def create_display_table(
             'textAlign': 'left',
             'fontSize': 12,
             'font-family': 'helvetica',
-            'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
+            'minWidth': '150px', 'width': '150px', 'maxWidth': '150px',
             'height': 'auto',
             'whiteSpace': 'normal'
+        }
+    )
+
+    table_style['style_header'].update(
+        {
+            
+            'height': '40px',
         }
     )
 
@@ -132,7 +139,7 @@ def create_edit_record_table(
             'maxHeight': height,
             'minWidth': width,
             'width': width,
-            'maxWidth': width
+            'maxWidth': '500px'
         }
     )
     table_style['style_cell'].update(
@@ -202,12 +209,22 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[],
     if not dropdown_fields:
         dropdown_fields = dj_utils.get_dropdown_fields(table)
 
-    master_table = create_edit_record_table(
-        table, f'{mode}-{id}-table',
-        dropdown_fields=dropdown_fields,
-        height='200px', width='800px',
-        pk_editable=mode != 'update',
-        defaults=defaults)
+    master_table = []
+    master_table.append(
+        html.Div(
+        children=[
+            html.H6(f'{mode.capitalize()} {table.__name__} record'),
+            create_edit_record_table(
+                table, f'{mode}-{id}-table',
+                dropdown_fields=dropdown_fields,
+                height='110px', width='815px',
+                pk_editable=mode != 'update',
+                defaults=defaults)
+            ],
+            style={'marginLeft': '2em', 'marginTop': '0.5em'}
+        )
+    )
+    
 
     # TODO: allow defaults in part table as well
     if extra_tables:
@@ -225,31 +242,32 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[],
                                     'display': 'block',
                                     'width': '150px',
                                     'height': '40px',
-                                    'marginBottom': '0.5em'
+                                    'marginBottom': '0.5em',
+                                    'marginTop': '0.3em'
                                 }
                             ),
                         create_edit_record_table(
                             p, f'{mode}-{table.__name__.lower()}-{p.__name__.lower()}-table',
                             excluded_fields=table.heading.primary_key,
-                            height='100px', width='370px',
+                            height='110px', width='auto',
                             pk_editable=True, deletable=True),
                     ],
-                    style={'marginLeft': '1em'}
+                    style={'marginLeft': '2em', 'marginBottom': '1em'}
                 ),
             )
-        tables = [master_table, dbc.Row(part_tables)]
+        tables = [dbc.Row(master_table), dbc.Row(part_tables)]
+ 
     else:
-        tables = [master_table]
+        tables = [dbc.Row(master_table)]
 
     message_box = dcc.Textarea(
         id=f'{mode}-{id}-message',
         value=f'{mode.capitalize()} message:',
-        style={'width': 250, 'height': 200, 'marginLeft': '2em'}
+        style={'width': 250, 'height': 200, 'marginLeft': '4.5em', 'marginTop': '1.5em'}
     )
 
     return dbc.Modal(
         [
-            dbc.ModalHeader(f'{mode.capitalize()} {table.__name__} record'),
             dbc.Row([dbc.Col(
                         tables, width=8),
                      dbc.Col(message_box, width=4)]),
