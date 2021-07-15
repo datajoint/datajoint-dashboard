@@ -274,7 +274,8 @@ class TableBlock:
                 [
                     html.H6(f'{self.table.__name__}'),
                     self.main_display_table
-                ]
+                ],
+                style={'marginLeft': '-0.9em',}
             )
 
         if add_modal:
@@ -309,15 +310,18 @@ class TableBlock:
                                     self.delete_message_box,
                                     self.filter_collection_layout,
                                 ],
-                                style={'marginLeft': '-2.5em', 'display': 'inline-block'}
+                    
+                                style={'marginRight': '2em', #Select Table style
+                                       'marginLeft': '-3.75em', 
+                                       'display': 'inline-block'}
                             ),
 
                             html.Div(
                                 [
                                     self.display_table
                                 ],
-                                style={'marginRight': '2em',
-                                       'marginLeft': '-2.5em',
+                                style={'marginRight': '2em', #Select Table style
+                                       'marginLeft': '-2.75em', 
                                        'display': 'inline-block'})
 
                         ]
