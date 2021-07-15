@@ -5,8 +5,27 @@ import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import copy
 from . import dj_utils
+import re
 
-table_style_template = dict(
+table_style_template_display = dict(
+    style_cell={
+        'textAlign': 'left',
+        'fontSize': 12,
+        'font-family': 'helvetica',
+        'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
+        'height': '30px'
+        },
+    page_action='native',
+    page_size=50,
+    style_table={
+        'minWidth': '1200px',
+        'width': '1200px',
+        'maxWidth': '1200px'},
+    style_header={
+        'backgroundColor': 'rgb(220, 220, 220)',
+        'fontWeight': 'bold'})
+
+table_style_template_edit = dict(
     style_cell={
         'textAlign': 'left',
         'fontSize': 12,
@@ -34,7 +53,7 @@ def create_display_table(
     if not table_id:
         table_id = table.__name__.lower()
 
-    table_style = copy.deepcopy(table_style_template)
+    table_style = copy.deepcopy(table_style_template_display)
     table_style.update(
         fixed_columns={'headers': True, 'data': 1},
         # allow sorting
@@ -65,17 +84,27 @@ def create_display_table(
             'maxWidth': width
         }
     )
+    table_style['style_cell'].update(
+        {
+            'textAlign': 'left',
+            'fontSize': 12,
+            'font-family': 'helvetica',
+            'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
+            'height': 'auto',
+            'whiteSpace': 'normal'
+        }
+    )
 
     if empty_first:
         data = [{c['id']: '' for c in columns}]
-    elif not data:
+    elif data is None:
         data = table.fetch(as_dict=True)
 
     return dash_table.DataTable(
         id=table_id,
         columns=columns,
         data=data,
-        **table_style
+        **table_style,
     )
 
 
@@ -95,7 +124,7 @@ def create_edit_record_table(
 
     required_fields = dj_utils.get_required_fields(table)
 
-    table_style = copy.deepcopy(table_style_template)
+    table_style = copy.deepcopy(table_style_template_edit)
     table_style['style_table'].update(
         {
             'minHeight': height,
@@ -106,14 +135,33 @@ def create_edit_record_table(
             'maxWidth': width
         }
     )
-
+    table_style['style_cell'].update(
+        {
+            'textAlign': 'left',
+            'fontSize': 12,
+            'font-family': 'helvetica',
+            'minWidth': '120px', 'width': '120px', 'maxWidth': '120px',
+            'height': 'auto',
+            'whiteSpace': 'normal'
+        }
+    )
     heading = table.heading
-    columns = [{"name": i, "id": i}
+    columns = [{'name': i, 'id': i}
                for i in heading.names if i not in excluded_fields]
-    columns = [{"name": c['name'] + '*', "id": c['id']}
-               if c['id'] in required_fields else c
-               for c in columns]
-    #some fields are presented as dropdown list
+    # contruct a comprehensive name of column
+    for c in columns:
+        if c['id'] in required_fields:
+            c['name'] = c['name'] + '*'
+        # add data type
+        dtype = heading.attributes[c['id']].type
+        # if there is unit
+        unit = re.search(r'^\((.+)\)', heading.attributes[c['id']].comment)
+        if unit:
+            dtype = dtype + f'; {unit.group(1)}'
+
+        c['name'] = c['name'] + f' ({dtype})'
+
+    # some fields are presented as dropdown list
     if dropdown_fields:
         for c in columns:
             if c['id'] in dropdown_fields:
@@ -167,7 +215,8 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[],
         for p in extra_tables:
             part_tables.append(
                 html.Div(
-                    [
+                    id=f'{mode}-{table.__name__.lower()}-{p.__name__.lower()}-table-div',
+                    children=[
                         html.H6(f'{p.__name__}'),
                         html.Button(
                             'Add a row',
