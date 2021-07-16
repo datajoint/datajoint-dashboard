@@ -26,8 +26,6 @@ class Filter:
                  filter_id,
                  filter_name,
                  multi=False,
-                 table=None,
-                 field_name=None,
                  default_value=None,
                  filter_style=None):
         """Filter object that is able to update its options
@@ -43,10 +41,6 @@ class Filter:
                 based on the table status.
             multi (boolean, optional): this filter is a single or
                 multi option filter. Default is False.
-            table (DataJoint table object, optional): the table where
-                field_name comes from. Mandatory if options are not specified
-            field_name (str, optional): field name in table that serves as
-                the filter. Mandatory if options are not specified.
             default_value (single value or list): the default value of this
                 filter for the first load. Single value if multi=False,
                 list if multi=True
@@ -74,7 +68,6 @@ class Filter:
             persistence_type='memory'
         )
         self.update_restrictor(default_value)
-
 
     def update_restrictor(self, values):
         self.restrictor = self.query_function(values)
@@ -193,12 +186,15 @@ class TableBlock:
             self,
             main_display_table=None,
             add_modal=None,
-            update_modal=None
+            update_modal=None,
+            refresh_data=True
     ):
 
         if main_display_table:
             self.main_display_table = main_display_table
         else:
+            if refresh_data:
+                self.main_table_data = self.query.fetch(as_dict=True)
             self.main_display_table = component_utils.create_display_table(
                 self.table, f'{self.table_name}-table',
                 height=self.table_height, width=self.table_width,
@@ -310,9 +306,9 @@ class TableBlock:
                                     self.delete_message_box,
                                     self.filter_collection_layout,
                                 ],
-                    
+
                                 style={'marginRight': '2em', #Select Table style
-                                       'marginLeft': '-3.75em', 
+                                       'marginLeft': '-3.75em',
                                        'display': 'inline-block'}
                             ),
 
@@ -321,7 +317,7 @@ class TableBlock:
                                     self.display_table
                                 ],
                                 style={'marginRight': '2em', #Select Table style
-                                       'marginLeft': '-2.75em', 
+                                       'marginLeft': '-2.75em',
                                        'display': 'inline-block'})
 
                         ]
