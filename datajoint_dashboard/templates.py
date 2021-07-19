@@ -194,6 +194,7 @@ class TableBlock:
             self.main_display_table = main_display_table
         else:
             if refresh_data:
+                print(self.query)
                 self.main_table_data = self.query.fetch(as_dict=True)
             self.main_display_table = component_utils.create_display_table(
                 self.table, f'{self.table_name}-table',
