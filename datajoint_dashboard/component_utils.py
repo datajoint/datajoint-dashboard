@@ -97,7 +97,7 @@ def create_display_table(
 
     table_style['style_header'].update(
         {
-            
+
             'height': '40px',
         }
     )
@@ -118,16 +118,32 @@ def create_display_table(
 def create_edit_record_table(
         table, table_id,
         dropdown_fields=[], excluded_fields=[],
+        dropdown_limit=200,
         height='100px', width='1200px',
         n_rows=1,
         pk_editable=False,
         deletable=False,
         defaults={}):
 
+    """Create edit record table
+    Args:
+        table [DataJoint table object]: datajoint table that needs to be edited
+        table_id [str]: id in dash app
+        dropdown_fields [list]: list of dropdown fields, defaults [], if not specified, get all the dropdown fields,
+            which is either enum fields or foreign key references.
+        dropdown_limit [int]: limit number of entries in dropdown fields.
+    """
+
     if not dropdown_fields:
         dropdown_fields = dj_utils.get_dropdown_fields(table)
 
-    dropdown_fields = [f for f in dropdown_fields if f not in excluded_fields]
+    if dropdown_limit:
+        dropdown_fields = [f for f in dropdown_fields
+                           if f not in excluded_fields and
+                           len(dj_utils.get_options(table, f)) < dropdown_limit]
+    else:
+        dropdown_fields = [f for f in dropdown_fields
+                           if f not in excluded_fields]
 
     required_fields = dj_utils.get_required_fields(table)
 
@@ -224,7 +240,7 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[],
             style={'marginLeft': '2em', 'marginTop': '0.5em'}
         )
     )
-    
+
 
     # TODO: allow defaults in part table as well
     if extra_tables:
@@ -256,7 +272,7 @@ def create_modal(table, id=None, dropdown_fields=[], extra_tables=[],
                 ),
             )
         tables = [dbc.Row(master_table), dbc.Row(part_tables)]
- 
+
     else:
         tables = [dbc.Row(master_table)]
 
