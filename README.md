@@ -1,3 +1,7 @@
+> ⚠️ **This repository is archived and no longer maintained.**
+> Superseded by sci-viz.
+> For current DataJoint development, see [sci-viz](https://github.com/datajoint/sci-viz).
+
 # datajoint-dashboard
 Developing toolbox to build a Plotly Dash app for a DataJoint pipeline
 
